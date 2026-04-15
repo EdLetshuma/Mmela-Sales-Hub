@@ -1,0 +1,169 @@
+@import "tailwindcss";
+
+@theme {
+  /* Mmela Brand Colors */
+  --color-brand-950: #0F1B4A;
+  --color-brand-900: #1A348C;
+  --color-brand-800: #2646A6;
+  --color-brand-700: #235DCB;
+  --color-brand-600: #3A6FD8;
+  --color-brand-500: #528DDE;
+  --color-brand-400: #6FA3E6;
+  --color-brand-300: #8BB9EF;
+  --color-brand-200: #B5D4F4;
+  --color-brand-100: #DDE9FA;
+  --color-brand-50: #EEF4FD;
+
+  /* Semantic Colors */
+  --color-success-600: #0F6E56;
+  --color-success-100: #E1F5EE;
+  --color-warning-600: #854F0B;
+  --color-warning-100: #FAEEDA;
+  --color-danger-600: #A32D2D;
+  --color-danger-100: #FCEBEB;
+
+  /* Surfaces */
+  --color-surface-primary: #FFFFFF;
+  --color-surface-secondary: #F8F9FB;
+  --color-surface-tertiary: #F1F3F5;
+
+  /* Text */
+  --color-text-primary: #111827;
+  --color-text-secondary: #6B7280;
+  --color-text-muted: #9CA3AF;
+
+  /* Borders */
+  --color-border-default: #E5E7EB;
+  --color-border-subtle: #F1F3F5;
+
+  /* Typography */
+  --font-sans: "DM Sans", system-ui, -apple-system, sans-serif;
+  --font-mono: "JetBrains Mono", ui-monospace, monospace;
+
+  /* Border Radius */
+  --radius-sm: 6px;
+  --radius-md: 8px;
+  --radius-lg: 12px;
+  --radius-xl: 16px;
+  --radius-full: 9999px;
+}
+
+@layer base {
+  html {
+    font-family: var(--font-sans);
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+  }
+
+  body {
+    background-color: var(--color-surface-secondary);
+    color: var(--color-text-primary);
+    font-size: 14px;
+    line-height: 1.6;
+  }
+}
+
+@layer components {
+  .card {
+    background: var(--color-surface-primary);
+    border: 1px solid var(--color-border-default);
+    border-radius: var(--radius-lg);
+    padding: 1.25rem;
+  }
+
+  .badge {
+    display: inline-flex;
+    align-items: center;
+    padding: 2px 10px;
+    border-radius: var(--radius-full);
+    font-size: 12px;
+    font-weight: 500;
+    line-height: 1.5;
+  }
+
+  .badge-prospect { background: #E6F1FB; color: #0C447C; }
+  .badge-contacted { background: #E1F5EE; color: #085041; }
+  .badge-quoted { background: #FAEEDA; color: #633806; }
+  .badge-won { background: #EAF3DE; color: #27500A; }
+  .badge-lost { background: #FCEBEB; color: #791F1F; }
+
+  .input-field {
+    width: 100%;
+    padding: 8px 12px;
+    border: 1px solid var(--color-border-default);
+    border-radius: var(--radius-md);
+    font-size: 14px;
+    color: var(--color-text-primary);
+    background: var(--color-surface-primary);
+    transition: border-color 0.15s, box-shadow 0.15s;
+    outline: none;
+  }
+
+  .input-field:focus {
+    border-color: var(--color-brand-500);
+    box-shadow: 0 0 0 3px rgba(82, 141, 222, 0.15);
+  }
+
+  .input-field::placeholder {
+    color: var(--color-text-muted);
+  }
+
+  .btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 6px;
+    padding: 8px 16px;
+    border-radius: var(--radius-md);
+    font-size: 13px;
+    font-weight: 500;
+    cursor: pointer;
+    transition: all 0.15s;
+    border: none;
+    outline: none;
+  }
+
+  .btn:active {
+    transform: scale(0.98);
+  }
+
+  .btn-primary {
+    background: var(--color-brand-900);
+    color: white;
+  }
+
+  .btn-primary:hover {
+    background: var(--color-brand-800);
+  }
+
+  .btn-secondary {
+    background: var(--color-surface-primary);
+    color: var(--color-text-primary);
+    border: 1px solid var(--color-border-default);
+  }
+
+  .btn-secondary:hover {
+    background: var(--color-surface-secondary);
+  }
+
+  .btn-ghost {
+    background: transparent;
+    color: var(--color-text-secondary);
+  }
+
+  .btn-ghost:hover {
+    background: var(--color-surface-tertiary);
+    color: var(--color-text-primary);
+  }
+}
+
+@layer utilities {
+  .fade-in {
+    animation: fadeIn 0.3s ease-out forwards;
+  }
+
+  @keyframes fadeIn {
+    from { opacity: 0; transform: translateY(4px); }
+    to { opacity: 1; transform: translateY(0); }
+  }
+}
