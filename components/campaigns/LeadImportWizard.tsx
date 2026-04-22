@@ -113,8 +113,8 @@ function validateRow(row: ImportRow, mapping: Record<string, string>): MappedRow
   Object.entries(mapping).forEach(([col, field]) => {
     if (field === "__skip") return;
     const val = row[col]?.trim();
-    if (field === "name") { (mapped as Record<string, unknown>)[field] = val; if (val) nameFound = true; }
-    else if (val) (mapped as Record<string, unknown>)[field] = val;
+    if (field === "name") { (mapped as unknown as Record<string, unknown>)[field] = val; if (val) nameFound = true; }
+    else if (val) (mapped as unknown as Record<string, unknown>)[field] = val;
   });
 
   if (!nameFound || !mapped.name) mapped.error = "Name is required";
