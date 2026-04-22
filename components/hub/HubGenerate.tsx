@@ -318,13 +318,14 @@ async function exportCustomReport(
   selectedCols: string[],
   title: string
 ): Promise<void> {
-  const XLSX = await new Promise<typeof import("xlsx")>((resolve, reject) => {
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const XLSX = await new Promise<any>((resolve, reject) => {
     const existing = document.querySelector("script[data-xlsx]");
-    if (existing) { resolve((window as unknown as { XLSX: typeof import("xlsx") }).XLSX); return; }
+    if (existing) { resolve((window as unknown as { XLSX: any }).XLSX); return; }
     const s = document.createElement("script");
     s.src = "https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js";
     s.setAttribute("data-xlsx", "true");
-    s.onload = () => resolve((window as unknown as { XLSX: typeof import("xlsx") }).XLSX);
+    s.onload = () => resolve((window as unknown as { XLSX: any }).XLSX);
     s.onerror = reject;
     document.head.appendChild(s);
   });
