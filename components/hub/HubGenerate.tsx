@@ -393,7 +393,7 @@ async function exportCustomReport(
   XLSX.utils.book_append_sheet(wb, ws, title.slice(0, 31));
 
   const date = new Date().toISOString().slice(0, 10);
-  const blob = new Blob([XLSX.write(wb, { type: "array", bookType: "xlsx" }) as Uint8Array], { type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" });
+  const blob = new Blob([XLSX.write(wb, { type: "array", bookType: "xlsx" }) as unknown as Uint8Array], { type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" });
   const url = URL.createObjectURL(blob);
   const a = document.createElement("a");
   a.href = url; a.download = `mmela-${source.replace(/_/g, "-")}-${date}.xlsx`;
