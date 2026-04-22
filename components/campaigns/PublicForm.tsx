@@ -69,11 +69,51 @@ export default function PublicForm({ slug }: PublicFormProps) {
     setError(null);
 
     try {
-      const nameField = fields.find(
-        (f) => f.field_type === FieldType.Text && f.field_key.includes("name")
+      // Match name field by: field_key contains "name", OR label contains "name"
+      // Covers: text_1776262190027 with label "Full name", "First name", "Name", etc.
+      const nameField = fields.find((f) =>
+        f.field_type === FieldType.Text && (
+          f.field_key.toLowerCase().includes("name") ||
+          f.label.toLowerCase().includes("name") ||
+          f.label.toLowerCase().includes("full name") ||
+          f.label.toLowerCase().includes("first name") ||
+          f.label.toLowerCase().includes("surname")
+        )
       );
+
+      // Also try first_name + last_name combination
+      const firstNameField = fields.find((f) =>
+        f.field_type === FieldType.Text && (
+          f.field_key.toLowerCase().includes("first") ||
+          f.label.toLowerCase().includes("first name")
+        )
+      );
+      const lastNameField = fields.find((f) =>
+        f.field_type === FieldType.Text && (
+          f.field_key.toLowerCase().includes("last") ||
+          f.label.toLowerCase().includes("last name") ||
+          f.label.toLowerCase().includes("surname")
+        )
+      );
+
       const emailField = fields.find((f) => f.field_type === FieldType.Email);
       const phoneField = fields.find((f) => f.field_type === FieldType.Phone);
+
+      // Build the name — prefer dedicated name field, fall back to first+last, then first text field
+      let resolvedName = "Unknown";
+      if (nameField && values[nameField.field_key]?.trim()) {
+        resolvedName = values[nameField.field_key].trim();
+      } else if (firstNameField && values[firstNameField.field_key]?.trim()) {
+        const first = values[firstNameField.field_key].trim();
+        const last = lastNameField ? values[lastNameField.field_key]?.trim() ?? "" : "";
+        resolvedName = [first, last].filter(Boolean).join(" ");
+      } else {
+        // Last resort: first non-empty text field
+        const anyTextField = fields.find(
+          (f) => f.field_type === FieldType.Text && values[f.field_key]?.trim()
+        );
+        if (anyTextField) resolvedName = values[anyTextField.field_key].trim();
+      }
 
       const params = new URLSearchParams(window.location.search);
 
@@ -81,7 +121,7 @@ export default function PublicForm({ slug }: PublicFormProps) {
       const businessUnitId = campaignData?.business_unit_id || "";
 
       await submitPublicLead({
-        name: nameField ? values[nameField.field_key] || "Unknown" : "Unknown",
+        name: resolvedName,
         email: emailField ? values[emailField.field_key] || "" : "",
         phone: phoneField ? values[phoneField.field_key] : undefined,
         form_id: form.id,

@@ -52,10 +52,20 @@ export async function getUserProfile(userId: string): Promise<User | null> {
 }
 
 export async function sendPasswordReset(email: string) {
-  const { error } = await supabase.auth.resetPasswordForEmail(email, {
-    redirectTo: `${window.location.origin}/auth/reset-password`,
-  });
-  if (error) throw error;
+  // NEXT_PUBLIC_ env vars are embedded at build time by Next.js.
+  // We read them from the supabase client which is already initialised
+  // with the correct URL — this works in both server and client contexts.
+  const supabaseUrl = supabase.supabaseUrl;
+  const res = await fetch(
+    `${supabaseUrl}/functions/v1/request-reset`,
+    {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ email }),
+    }
+  );
+  // The function always returns 200 — failure is logged server-side only
+  // to prevent email enumeration attacks
 }
 
 export async function updatePassword(newPassword: string) {

@@ -23,7 +23,9 @@ import {
   Pencil,
   MoreHorizontal,
   X,
+  Code2,
 } from "lucide-react";
+import EmbedSnippetModal from "@/components/campaigns/EmbedSnippetModal";
 
 interface FormListProps {
   onEditForm: (formId: string) => void;
@@ -40,6 +42,7 @@ export default function FormList({ onEditForm }: FormListProps) {
   const [copiedSlug, setCopiedSlug] = useState<string | null>(null);
   const [activeMenu, setActiveMenu] = useState<string | null>(null);
   const [showQr, setShowQr] = useState<string | null>(null);
+  const [embedForm, setEmbedForm] = useState<{ slug: string; name: string } | null>(null);
 
   useEffect(() => {
     loadData();
@@ -157,6 +160,7 @@ export default function FormList({ onEditForm }: FormListProps) {
               <div
                 key={form.id}
                 className="card flex items-center gap-4 group"
+                style={{ position: "relative", overflow: "visible" }}
               >
                 <div
                   className={`w-10 h-10 rounded-lg flex items-center justify-center flex-shrink-0 ${
@@ -193,72 +197,90 @@ export default function FormList({ onEditForm }: FormListProps) {
                   </p>
                 </div>
 
-                <div className="flex items-center gap-1.5 opacity-0 group-hover:opacity-100 transition-opacity">
+                <div className="flex items-center gap-1.5 flex-shrink-0">
                   <button
                     onClick={() => handleCopyLink(form.slug)}
-                    className="btn btn-ghost px-2 py-1.5 text-xs"
+                    className="btn btn-secondary text-xs gap-1.5"
                     title="Copy link"
                   >
                     {copiedSlug === form.slug ? (
-                      <Check className="w-3.5 h-3.5 text-green-600" />
+                      <><Check className="w-3.5 h-3.5 text-green-600" /> Copied</>
                     ) : (
-                      <Copy className="w-3.5 h-3.5" />
+                      <><Copy className="w-3.5 h-3.5" /> Copy link</>
                     )}
                   </button>
                   <button
                     onClick={() => setShowQr(showQr === form.id ? null : form.id)}
-                    className="btn btn-ghost px-2 py-1.5 text-xs"
+                    className="btn btn-secondary text-xs gap-1.5"
                     title="Show QR code"
                   >
-                    <QrCode className="w-3.5 h-3.5" />
+                    <QrCode className="w-3.5 h-3.5" /> QR code
+                  </button>
+                  <button
+                    onClick={() => setEmbedForm({ slug: form.slug, name: form.name })}
+                    className="btn btn-secondary text-xs gap-1.5"
+                    title="Get embed code"
+                  >
+                    <Code2 className="w-3.5 h-3.5" /> Embed
                   </button>
                   <button
                     onClick={() => window.open(getFormUrl(form.slug), "_blank")}
-                    className="btn btn-ghost px-2 py-1.5 text-xs"
+                    className="btn btn-secondary text-xs gap-1.5"
                     title="Preview form"
                   >
-                    <ExternalLink className="w-3.5 h-3.5" />
+                    <ExternalLink className="w-3.5 h-3.5" /> Preview
                   </button>
                   <button
                     onClick={() => onEditForm(form.id)}
-                    className="btn btn-ghost px-2 py-1.5 text-xs"
+                    className="btn btn-secondary text-xs gap-1.5"
                     title="Edit fields"
                   >
-                    <Pencil className="w-3.5 h-3.5" />
+                    <Pencil className="w-3.5 h-3.5" /> Edit
                   </button>
                   <button
                     onClick={() => handleToggleActive(form)}
-                    className="btn btn-ghost px-2 py-1.5 text-xs"
+                    className={`btn text-xs gap-1.5 ${form.is_active ? "btn-secondary" : "btn-primary"}`}
                     title={form.is_active ? "Deactivate" : "Activate"}
                   >
                     {form.is_active ? (
-                      <ToggleRight className="w-4 h-4 text-green-600" />
+                      <><ToggleRight className="w-4 h-4 text-green-600" /> Live</>
                     ) : (
-                      <ToggleLeft className="w-4 h-4" />
+                      <><ToggleLeft className="w-4 h-4" /> Inactive</>
                     )}
                   </button>
                 </div>
 
-                {/* QR Code inline display */}
+                {/* QR Code popup - outside flex row so it can overflow */}
                 {showQr === form.id && (
-                  <div className="absolute right-4 top-full mt-2 bg-white rounded-lg border border-gray-200 shadow-lg p-4 z-20">
+                  <div
+                    style={{
+                      position: "absolute", right: 16, top: "100%", marginTop: 8,
+                      background: "#fff", borderRadius: 12,
+                      border: "1px solid #E5E7EB", boxShadow: "0 8px 32px rgba(0,0,0,0.12)",
+                      padding: 16, zIndex: 50, minWidth: 232,
+                    }}
+                    onClick={e => e.stopPropagation()}
+                  >
+                    <div className="flex items-center justify-between mb-3">
+                      <p className="text-xs font-semibold text-gray-700">QR Code</p>
+                      <button
+                        className="btn btn-ghost p-1"
+                        onClick={() => setShowQr(null)}
+                      >
+                        <X className="w-3.5 h-3.5" />
+                      </button>
+                    </div>
                     <div className="text-center">
                       <img
-                        src={`https://api.qrserver.com/v1/create-qr-code/?size=200x200&data=${encodeURIComponent(
-                          getFormUrl(form.slug)
-                        )}`}
+                        src={`https://api.qrserver.com/v1/create-qr-code/?size=200x200&data=${encodeURIComponent(getFormUrl(form.slug))}`}
                         alt="QR Code"
                         width={200}
                         height={200}
-                        className="rounded-md"
+                        style={{ borderRadius: 8, border: "1px solid #E5E7EB" }}
                       />
-                      <p className="text-xs text-gray-500 mt-2 font-mono">
-                        /f/{form.slug}
-                      </p>
+                      <p className="text-xs text-gray-400 mt-2 font-mono">/f/{form.slug}</p>
                       <a
-                        href={`https://api.qrserver.com/v1/create-qr-code/?size=600x600&format=png&data=${encodeURIComponent(
-                          getFormUrl(form.slug)
-                        )}`}
+                        href={`https://api.qrserver.com/v1/create-qr-code/?size=600x600&format=png&data=${encodeURIComponent(getFormUrl(form.slug))}`}
                         download={`qr-${form.slug}.png`}
                         className="btn btn-secondary text-xs mt-2 w-full"
                       >
@@ -283,6 +305,14 @@ export default function FormList({ onEditForm }: FormListProps) {
             setShowCreateModal(false);
             onEditForm(formId);
           }}
+        />
+      )}
+
+      {embedForm && (
+        <EmbedSnippetModal
+          formName={embedForm.name}
+          formSlug={embedForm.slug}
+          onClose={() => setEmbedForm(null)}
         />
       )}
     </div>

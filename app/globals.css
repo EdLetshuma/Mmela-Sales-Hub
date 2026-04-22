@@ -166,4 +166,32 @@
     from { opacity: 0; transform: translateY(4px); }
     to { opacity: 1; transform: translateY(0); }
   }
+
+  /* Horizontal scroll for data tables on small screens */
+  .table-scroll {
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+  }
+
+  /* Scrollable nav rows — no wrapping, no clipping */
+  .module-switcher,
+  .primary-nav,
+  .sub-nav {
+    overflow-x: auto;
+    scrollbar-width: none;
+    -ms-overflow-style: none;
+  }
+  .module-switcher::-webkit-scrollbar,
+  .primary-nav::-webkit-scrollbar,
+  .sub-nav::-webkit-scrollbar { display: none; }
+
+  /* Chart grid — 2 cols on desktop, 1 on tablet */
+  .chart-grid {
+    display: grid;
+    gap: 1rem;
+    grid-template-columns: repeat(2, 1fr);
+  }
+  @media (max-width: 900px) {
+    .chart-grid { grid-template-columns: 1fr; }
+  }
 }

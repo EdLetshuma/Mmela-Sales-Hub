@@ -4,6 +4,7 @@ import React, { createContext, useContext, useState, useEffect } from "react";
 import type { User } from "@/types";
 import type { MmelaModule } from "@/types";
 import { getSession, getUserProfile, onAuthStateChange } from "@/lib/auth";
+import { supabase } from "@/lib/supabase";
 import { getAccessibleModules, getDefaultModule } from "@/lib/modules";
 
 interface AuthContextType {
@@ -26,15 +27,20 @@ const AuthContext = createContext<AuthContextType>({
   refreshUser: async () => {},
 });
 
+function clearStaleTokens() {
+  if (typeof window === "undefined") return;
+  Object.keys(localStorage)
+    .filter((k) => k.startsWith("sb-"))
+    .forEach((k) => localStorage.removeItem(k));
+}
+
 export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [user, setUser] = useState<User | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [activeModule, setActiveModule] = useState<MmelaModule>("sales");
 
-  const accessibleModules = user
-    ? getAccessibleModules(user.role)
-    : [];
+  const accessibleModules = user ? getAccessibleModules(user.role) : [];
 
   const refreshUser = async () => {
     try {
@@ -49,9 +55,22 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       } else {
         setUser(null);
       }
-    } catch (err) {
-      console.error("Error refreshing user:", err);
-      setError("Failed to load user profile");
+    } catch (err: unknown) {
+      const message = err instanceof Error ? err.message : String(err);
+      // Invalid refresh token — clear storage and show login
+      if (
+        message.includes("Refresh Token Not Found") ||
+        message.includes("Invalid Refresh Token") ||
+        message.includes("refresh_token_not_found")
+      ) {
+        clearStaleTokens();
+        await supabase.auth.signOut();
+        setUser(null);
+        setActiveModule("sales");
+      } else {
+        console.error("Error refreshing user:", err);
+        setError("Failed to load user profile");
+      }
     }
   };
 
@@ -67,13 +86,12 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     const {
       data: { subscription },
     } = onAuthStateChange(async (event) => {
-      if (event === "SIGNED_IN") {
+      if (event === "SIGNED_IN" || event === "TOKEN_REFRESHED") {
         await refreshUser();
       } else if (event === "SIGNED_OUT") {
+        clearStaleTokens();
         setUser(null);
         setActiveModule("sales");
-      } else if (event === "PASSWORD_RECOVERY") {
-        // Handle password recovery navigation in the component
       }
     });
 

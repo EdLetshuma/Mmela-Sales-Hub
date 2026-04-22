@@ -74,7 +74,7 @@ export interface User {
 
 // --- Module Access ---
 
-export type MmelaModule = "sales" | "campaigns" | "concierge" | "credit-health";
+export type MmelaModule = "sales" | "campaigns" | "concierge" | "credit-health" | "hub";
 
 export interface ModuleConfig {
   id: MmelaModule;

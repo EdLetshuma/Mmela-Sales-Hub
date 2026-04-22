@@ -22,6 +22,14 @@ export default function ResetPasswordPage() {
 
   const allMet = requirements.every((r) => r.met);
 
+  const LOGO = "https://tslovjdrcbnewcajawiq.supabase.co/storage/v1/object/public/Logos/MFS%20LOGO%20ROTATED.png";
+  const LogoHeader = ({ sub }: { sub?: string }) => (
+    <div style={{ textAlign:"center", marginBottom:32 }}>
+      <img src={LOGO} alt="Mmela" style={{ width:100, height:"auto", objectFit:"contain", margin:"0 auto 12px", display:"block", filter:"brightness(0) invert(1)" }} />
+      {sub && <p style={{ color:"rgba(204,224,245,.6)", fontSize:13, margin:0 }}>{sub}</p>}
+    </div>
+  );
+
   const handleReset = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!allMet) return;
@@ -45,11 +53,7 @@ export default function ResetPasswordPage() {
     return (
       <div className="min-h-screen bg-brand-900 flex items-center justify-center p-4">
         <div className="w-full max-w-[400px]">
-          <div className="text-center mb-8">
-            <h1 className="text-2xl font-semibold text-white tracking-tight">
-              Mmela
-            </h1>
-          </div>
+          <LogoHeader />
           <div className="bg-white rounded-xl p-8 text-center">
             <div className="w-12 h-12 rounded-full bg-green-100 flex items-center justify-center mx-auto mb-4">
               <ShieldCheck className="w-6 h-6 text-green-600" />
@@ -73,12 +77,7 @@ export default function ResetPasswordPage() {
   return (
     <div className="min-h-screen bg-brand-900 flex items-center justify-center p-4">
       <div className="w-full max-w-[400px]">
-        <div className="text-center mb-8">
-          <h1 className="text-2xl font-semibold text-white tracking-tight">
-            Mmela
-          </h1>
-          <p className="text-brand-300 text-sm mt-1">Set a new password</p>
-        </div>
+        <LogoHeader sub="Set a new password" />
 
         <div className="bg-white rounded-xl p-8">
           {error && (

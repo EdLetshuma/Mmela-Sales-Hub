@@ -134,7 +134,8 @@ export default function LeadInbox() {
             {filterUnit ? ` · ${getUnitName(filterUnit)}` : ""}
           </p>
         </div>
-        {selectedLeads.size > 0 && (
+        <div className="flex items-center gap-2">
+          {selectedLeads.size > 0 && (
           <div className="flex items-center gap-2">
             <span className="text-sm text-gray-500">
               {selectedLeads.size} selected
@@ -164,6 +165,7 @@ export default function LeadInbox() {
             </button>
           </div>
         )}
+        </div>
       </div>
 
       {/* Filters */}
@@ -244,7 +246,8 @@ export default function LeadInbox() {
           </p>
         </div>
       ) : (
-        <div className="card p-0 overflow-hidden">
+        <div className="card p-0" style={{ overflow: "visible" }}>
+          <div className="table-scroll" style={{ borderRadius: 12 }}>
           <table className="w-full text-sm">
             <thead>
               <tr className="border-b border-gray-100 bg-gray-50/50">
@@ -368,6 +371,7 @@ export default function LeadInbox() {
               })}
             </tbody>
           </table>
+          </div>
         </div>
       )}
     </div>
