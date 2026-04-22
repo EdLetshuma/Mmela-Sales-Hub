@@ -87,7 +87,7 @@ export default function SalesAnalytics({ segment }: SalesAnalyticsProps) {
     const totalPremium = activePolicies.reduce((s, p) => s + Number(p.premium ?? 0), 0);
     const won = leads.filter(l => l.status === "Won").length;
     const conv = leads.length > 0 ? Math.round((won / leads.length) * 100) / 100 : 0;
-    const newThisMonth = leads.filter(l => l.created_at >= startOfMonth).length;
+    const newThisMonth = leads.filter(l => String(l.created_at ?? "") >= startOfMonth).length;
 
     // Monthly premium trend
     const y = parseInt(yearFilter);

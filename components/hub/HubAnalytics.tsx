@@ -154,7 +154,7 @@ export default function HubAnalytics() {
         // Source breakdown
         const sourceCounts: Record<string, number> = {};
         leads.forEach((l) => {
-          const src = l.source || l.source_type || "Other";
+          const src = String(l.source ?? l.source_type ?? "Other");
           sourceCounts[src] = (sourceCounts[src] ?? 0) + 1;
         });
         setSources(

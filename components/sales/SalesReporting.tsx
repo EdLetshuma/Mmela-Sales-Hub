@@ -125,7 +125,7 @@ export default function SalesReporting({ segment }: SalesReportingProps) {
           l.status ?? "",
           l.source ?? "",
           soldByName(l.assigned_to_user_id),
-          l.created_at ? new Date(l.created_at).toLocaleDateString("en-ZA") : "",
+          l.created_at ? new Date(l.created_at as string).toLocaleDateString("en-ZA") : "",
         ]),
         ["Name", "Email", "Phone", "Status", "Source", "Assigned to", "Date added"]
       );
@@ -312,7 +312,7 @@ export default function SalesReporting({ segment }: SalesReportingProps) {
                     <td className="px-4 py-2.5 text-gray-500">{l.source ?? "—"}</td>
                     <td className="px-4 py-2.5 text-gray-500">{soldByName(l.assigned_to_user_id)}</td>
                     <td className="px-4 py-2.5 text-gray-400 text-xs">
-                      {l.created_at ? new Date(l.created_at).toLocaleDateString("en-ZA", { day: "numeric", month: "short", year: "numeric" }) : "—"}
+                      {l.created_at ? new Date(l.created_at as string).toLocaleDateString("en-ZA", { day: "numeric", month: "short", year: "numeric" }) : "—"}
                     </td>
                   </tr>
                 ))}

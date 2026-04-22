@@ -47,7 +47,7 @@ export default function CreditHealthAnalytics() {
 
     const now = new Date();
     const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1).toISOString();
-    const thisMonth = leads.filter(l => l.created_at >= startOfMonth).length;
+    const thisMonth = leads.filter(l => String(l.created_at ?? "") >= startOfMonth).length;
 
     // Status breakdown
     const statusData = CREDIT_HEALTH_STATUSES.map(s => ({
