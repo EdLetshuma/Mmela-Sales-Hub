@@ -1,4 +1,5 @@
 import { supabase } from "./supabase";
+import { normaliseContact } from "./normalise";
 import type {
   Campaign,
   Form,
@@ -229,7 +230,7 @@ export async function submitPublicLead(leadData: {
   const { data, error } = await supabase
     .from("leads")
     .insert({
-      ...leadData,
+      ...normaliseContact(leadData),
       status: "Prospect",
       source: "Campaign",
     })

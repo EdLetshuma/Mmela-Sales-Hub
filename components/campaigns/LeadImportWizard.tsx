@@ -12,7 +12,7 @@ import { Upload, ChevronRight, ChevronLeft, Check, X, AlertCircle, Download } fr
 interface ImportRow { [key: string]: string; }
 
 interface MappedRow {
-  name: string;
+  name?: string;
   email?: string;
   phone?: string;
   segment?: string;

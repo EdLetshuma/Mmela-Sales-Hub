@@ -28,6 +28,7 @@ const ALL_ROLES = [
 ];
 
 const SPECIALIZATIONS = ["Individual", "Commercial", "Both"];
+const SALES_ROLES = ["Sales Agent", "Team Leader", "Manager", "Admin", "Lead Admin", "Policy Admin", "Marketing Admin"];
 
 const ROLE_DESC: Record<string, string> = {
   "Admin": "Full access to all modules, settings and user management.",
@@ -142,7 +143,7 @@ function CreateUserModal({
             <div className="grid grid-cols-2 gap-3">
               <div>
                 <label className="text-xs text-gray-500 mb-1 block">Role</label>
-                <select className="input-field" value={form.role} onChange={e => setForm(f => ({...f,role:e.target.value}))}>
+                <select className="input-field" value={form.role} onChange={e => setForm(f => ({...f,role:e.target.value, specialization: SALES_ROLES.includes(e.target.value) ? (f.specialization||"Individual") : ""}))}>
                   {ALL_ROLES.map(r => <option key={r} value={r}>{r}</option>)}
                 </select>
               </div>

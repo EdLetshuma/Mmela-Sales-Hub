@@ -69,6 +69,7 @@ export interface SalesLead {
   primary_contact?: PrimaryContact;
   industry?: string;
   scheme_details?: Record<string, unknown>;
+  company_name?: string;
   created_at?: string;
   updated_at?: string;
 }
