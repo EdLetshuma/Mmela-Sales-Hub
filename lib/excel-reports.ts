@@ -101,25 +101,33 @@ function statusStyle(value: string, bg: string): XLSX.CellStyle {
 
 // ── Logo fetcher (SVG → PNG via canvas) ───────────────────────
 
-const LOGO_PNG_URL =
-  "https://tslovjdrcbnewcajawiq.supabase.co/storage/v1/object/public/Logos/MFS%20LOGO%20ROTATED.png";
-
 let _logo: string | null = null;
 
 async function getLogo(): Promise<string | null> {
   if (_logo !== null) return _logo || null;
   try {
-    const res = await fetch(LOGO_PNG_URL);
-    if (!res.ok) { _logo = ""; return null; }
-    const blob   = await res.blob();
-    const base64 = await new Promise<string>((resolve, reject) => {
-      const reader = new FileReader();
-      reader.onloadend = () => {
-        const result = reader.result as string;
-        resolve(result.split(",")[1]);
+    const { data, error } = await supabase.storage
+      .from("Logos")
+      .download("Mmela MFS Logo.svg");
+    if (error || !data) { _logo = ""; return null; }
+
+    const svgText = await data.text();
+    const svgBlob = new Blob([svgText], { type: "image/svg+xml" });
+    const svgUrl  = URL.createObjectURL(svgBlob);
+
+    const base64 = await new Promise<string>((res, rej) => {
+      const img = new Image();
+      img.crossOrigin = "anonymous";
+      img.onload = () => {
+        const canvas = document.createElement("canvas");
+        canvas.width  = 640;
+        canvas.height = Math.round((img.height / img.width) * 640);
+        canvas.getContext("2d")!.drawImage(img, 0, 0, canvas.width, canvas.height);
+        res(canvas.toDataURL("image/png").split(",")[1]);
+        URL.revokeObjectURL(svgUrl);
       };
-      reader.onerror = reject;
-      reader.readAsDataURL(blob);
+      img.onerror = () => { URL.revokeObjectURL(svgUrl); rej(); };
+      img.src = svgUrl;
     });
     _logo = base64;
     return base64;

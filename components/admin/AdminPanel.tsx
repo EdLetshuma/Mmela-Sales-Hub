@@ -29,9 +29,6 @@ const ALL_ROLES = [
 
 const SPECIALIZATIONS = ["Individual", "Commercial", "Both"];
 
-// Only Sales-related roles use Individual/Commercial specialization
-const SALES_ROLES = ["Sales Agent", "Team Leader", "Manager", "Admin", "Lead Admin", "Policy Admin", "Marketing Admin"];
-
 const ROLE_DESC: Record<string, string> = {
   "Admin": "Full access to all modules, settings and user management.",
   "Manager": "Access to all modules and analytics. Cannot manage users.",
@@ -145,18 +142,16 @@ function CreateUserModal({
             <div className="grid grid-cols-2 gap-3">
               <div>
                 <label className="text-xs text-gray-500 mb-1 block">Role</label>
-                <select className="input-field" value={form.role} onChange={e => setForm(f => ({...f,role:e.target.value, specialization: SALES_ROLES.includes(e.target.value) ? (f.specialization || "Individual") : ""}))}>
+                <select className="input-field" value={form.role} onChange={e => setForm(f => ({...f,role:e.target.value}))}>
                   {ALL_ROLES.map(r => <option key={r} value={r}>{r}</option>)}
                 </select>
               </div>
-              {SALES_ROLES.includes(form.role) && (
               <div>
                 <label className="text-xs text-gray-500 mb-1 block">Specialization</label>
                 <select className="input-field" value={form.specialization} onChange={e => setForm(f => ({...f,specialization:e.target.value}))}>
                   {SPECIALIZATIONS.map(s => <option key={s} value={s}>{s}</option>)}
                 </select>
               </div>
-              )}
             </div>
             {units.length > 0 && (
               <div>
@@ -283,18 +278,16 @@ function EditUserModal({
               <div className="grid grid-cols-2 gap-3">
                 <div>
                   <label className="text-xs text-gray-500 mb-1 block">Role</label>
-                  <select className="input-field" value={form.role} onChange={e => setForm(f => ({...f, role: e.target.value, specialization: SALES_ROLES.includes(e.target.value) ? (f.specialization || "Individual") : ""}))}>
+                  <select className="input-field" value={form.role} onChange={e => setForm(f => ({...f,role:e.target.value}))}>
                     {ALL_ROLES.map(r => <option key={r} value={r}>{r}</option>)}
                   </select>
                 </div>
-                {SALES_ROLES.includes(form.role) && (
                 <div>
                   <label className="text-xs text-gray-500 mb-1 block">Specialization</label>
                   <select className="input-field" value={form.specialization} onChange={e => setForm(f => ({...f,specialization:e.target.value}))}>
                     {SPECIALIZATIONS.map(s => <option key={s} value={s}>{s}</option>)}
                   </select>
                 </div>
-                )}
               </div>
               <div className="grid grid-cols-2 gap-3">
                 <div>
@@ -464,9 +457,7 @@ export default function AdminPanel() {
                     <td className="px-4 py-3 text-gray-500 text-xs">{u.email}</td>
                     <td className="px-4 py-3"><RoleBadge role={u.role} /></td>
                     <td className="px-4 py-3 text-gray-500 text-xs whitespace-nowrap">{unitName(u.business_unit_id)}</td>
-                    <td className="px-4 py-3 text-gray-500 text-xs">
-                      {SALES_ROLES.includes(u.role) ? (u.specialization ?? "—") : <span className="text-gray-300">—</span>}
-                    </td>
+                    <td className="px-4 py-3 text-gray-500 text-xs">{u.specialization ?? "—"}</td>
                     <td className="px-4 py-3">
                       <span className="badge" style={u.status === "Active" ? {background:"#EAF3DE",color:"#27500A"} : {background:"#FCEBEB",color:"#791F1F"}}>
                         {u.status}
