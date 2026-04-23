@@ -17,8 +17,7 @@ export default function PlatformShell() {
   // Agents locked to one specialization cannot switch
   const canToggleSegment =
     !user?.specialization ||
-    user.specialization === UserSpecialization.Both ||
-    user.specialization === "Both";
+    user.specialization === UserSpecialization.Both;
 
   // Auto-set segment based on user's specialization on login
   useEffect(() => {

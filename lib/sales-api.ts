@@ -9,6 +9,8 @@ export interface SalesUser {
   id: string;
   name: string;
   role: string;
+  email?: string;
+  specialization?: string;
 }
 
 export interface AppointmentDetails {

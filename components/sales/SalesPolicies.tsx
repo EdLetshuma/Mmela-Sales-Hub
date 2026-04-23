@@ -104,7 +104,8 @@ export default function SalesPolicies({ segment, onViewPolicy }: SalesPoliciesPr
   const clientName = (id?: string | null) => clients.find((c) => c.id === id)?.name ?? "—";
 
   async function handleAddPolicy(data: NewPolicyData) {
-    await createPolicy(data);
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    await createPolicy(data as any);
     await fetchAll();
   }
 

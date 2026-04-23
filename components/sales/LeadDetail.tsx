@@ -521,16 +521,16 @@ export default function LeadDetail({ leadId, onBack, onNavigate }: LeadDetailPro
               </div>
               {lead.appointment_details ? (
                 <>
-                  <FieldRow label="Date"     value={(lead.appointment_details as Record<string, string>).date} />
-                  <FieldRow label="Time"     value={(lead.appointment_details as Record<string, string>).time} />
-                  <FieldRow label="Location" value={(lead.appointment_details as Record<string, string>).location} />
-                  {(lead.appointment_details as Record<string, string>).outcome && (
+                  <FieldRow label="Date"     value={(lead.appointment_details as unknown as Record<string, string>).date} />
+                  <FieldRow label="Time"     value={(lead.appointment_details as unknown as Record<string, string>).time} />
+                  <FieldRow label="Location" value={(lead.appointment_details as unknown as Record<string, string>).location} />
+                  {(lead.appointment_details as unknown as Record<string, string>).outcome && (
                     <div className="mt-2 px-3 py-2 rounded-lg text-xs font-medium" style={{ background: "#EAF3DE", color: "#27500A" }}>
-                      Outcome: {(lead.appointment_details as Record<string, string>).outcome}
+                      Outcome: {(lead.appointment_details as unknown as Record<string, string>).outcome}
                     </div>
                   )}
-                  {(lead.appointment_details as Record<string, string>).notes && (
-                    <FieldRow label="Notes" value={(lead.appointment_details as Record<string, string>).notes} />
+                  {(lead.appointment_details as unknown as Record<string, string>).notes && (
+                    <FieldRow label="Notes" value={(lead.appointment_details as unknown as Record<string, string>).notes} />
                   )}
                 </>
               ) : (
@@ -721,7 +721,7 @@ export default function LeadDetail({ leadId, onBack, onNavigate }: LeadDetailPro
         <AppointmentModal
           isOpen={apptModalOpen}
           clientName={lead.name}
-          existing={lead.appointment_details as Record<string, string> | null ?? undefined}
+          existing={lead.appointment_details as unknown as Record<string, string> | null ?? undefined}
           onClose={() => setApptModalOpen(false)}
           onSave={async (details) => {
             const updated = await updateLead(lead.id, { appointment_details: details as unknown as SalesLead["appointment_details"] });

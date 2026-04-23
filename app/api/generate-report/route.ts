@@ -7,6 +7,7 @@
 
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
 import XLSX from "xlsx-js-style";
 
 const SUPABASE_URL      = process.env.NEXT_PUBLIC_SUPABASE_URL!;
