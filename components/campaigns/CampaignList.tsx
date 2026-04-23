@@ -16,11 +16,11 @@ import {
   MoreHorizontal,
   Pencil,
   Trash2,
-  ToggleLeft,
-  ToggleRight,
   X,
   Megaphone,
   Calendar,
+  Power,
+  PowerOff,
 } from "lucide-react";
 
 export default function CampaignList() {
@@ -190,12 +190,12 @@ export default function CampaignList() {
                     >
                       {campaign.is_active ? (
                         <>
-                          <ToggleLeft className="w-3.5 h-3.5" />
+                          <PowerOff className="w-3.5 h-3.5" />
                           Deactivate
                         </>
                       ) : (
                         <>
-                          <ToggleRight className="w-3.5 h-3.5" />
+                          <Power className="w-3.5 h-3.5" />
                           Activate
                         </>
                       )}

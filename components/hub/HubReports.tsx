@@ -1,7 +1,7 @@
 "use client";
 
 import React, { useEffect, useState, useCallback } from "react";
-import { Download, Mail, Plus, Trash2, Edit2, X, Toggle } from "lucide-react";
+import { Download, Mail, Plus, Trash2, Edit2, X } from "lucide-react";
 import {
   getReportMailings, createReportMailing, updateReportMailing, deleteReportMailing,
   REPORT_TYPES, type ReportMailing, type ReportTypeValue,
