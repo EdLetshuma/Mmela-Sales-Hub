@@ -103,9 +103,7 @@ export default function LeadDetail({ leadId, onBack, onNavigate }: LeadDetailPro
   const canSeeAppointments =
     isCommercial &&
     (user?.specialization === UserSpecialization.Commercial ||
-     user?.specialization === UserSpecialization.Both ||
-     user?.specialization === "Both" ||
-     user?.specialization === "Commercial");
+     user?.specialization === UserSpecialization.Both);
 
   // Modals
   const [quoteModalOpen, setQuoteModalOpen] = useState(false);
