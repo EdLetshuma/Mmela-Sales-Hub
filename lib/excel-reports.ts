@@ -293,7 +293,9 @@ async function buildWorkbook(
   const wb = XLSX.utils.book_new();
   XLSX.utils.book_append_sheet(wb, ws, sheetName.slice(0, 31));
 
-  return XLSX.write(wb, { type: "array", bookType: "xlsx" }) as unknown as Uint8Array;
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const result = XLSX.write(wb, { type: "array", bookType: "xlsx" }) as any;
+  return result as Uint8Array;
 }
 
 // ── Individual report generators ─────────────────────────────
