@@ -55,7 +55,7 @@ export async function sendPasswordReset(email: string) {
   // Calls our branded Edge Function which generates the Supabase recovery
   // link server-side and sends it via Resend with Mmela branding.
   const res = await fetch(
-    `${supabase.supabaseUrl}/functions/v1/request-reset`,
+    `${process.env.NEXT_PUBLIC_SUPABASE_URL}/functions/v1/request-reset`,
     {
       method: "POST",
       headers: { "Content-Type": "application/json" },
