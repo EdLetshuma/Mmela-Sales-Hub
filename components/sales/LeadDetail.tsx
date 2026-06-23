@@ -7,7 +7,7 @@ import { getSystemSettings, type SystemSettings } from "@/lib/settings-api";
 import QuoteModal, { type SavedQuote, type QuoteFormData } from "@/components/sales/QuoteModal";
 import AcceptQuoteModal from "@/components/sales/AcceptQuoteModal";
 import LostReasonModal from "@/components/sales/LostReasonModal";
-import AppointmentModal from "@/components/sales/AppointmentModal";
+import AppointmentModal, { type AppointmentDetails } from "@/components/sales/AppointmentModal";
 import { useAuth } from "@/components/providers/AuthProvider";
 import { UserSpecialization } from "@/types";
 
@@ -435,7 +435,7 @@ export default function LeadDetail({ leadId, onBack, onNavigate }: LeadDetailPro
                           defaultValue={pcVal}
                           onChange={(e) => {
                             const current = (editForm as Record<string, unknown>).primary_contact as Record<string, string> ?? {};
-                            setEditForm((f) => ({ ...f, primary_contact: { ...current, [pcKey]: e.target.value } } as Partial<SalesLead>));
+                            setEditForm((f) => ({ ...f, primary_contact: { ...current, [pcKey]: e.target.value } } as unknown as Partial<SalesLead>));
                           }}
                         />
                       </div>
@@ -472,14 +472,14 @@ export default function LeadDetail({ leadId, onBack, onNavigate }: LeadDetailPro
               {/* Commercial: company + primary contact */}
               {isCommercial && (
                 <>
-                  <FieldRow label="Company"   value={(lead as Record<string, unknown>).company_name as string} />
+                  <FieldRow label="Company"   value={lead.company_name ?? ""} />
                   {lead.primary_contact && (
                     <div className="mt-3 p-3 rounded-lg space-y-1" style={{ background: "#F8F9FB", border: "1px solid #E5E7EB" }}>
                       <p className="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-2">Primary contact</p>
-                      <FieldRow label="Name"  value={(lead.primary_contact as Record<string, string>).name} />
-                      <FieldRow label="Title" value={(lead.primary_contact as Record<string, string>).title} />
-                      <FieldRow label="Phone" value={(lead.primary_contact as Record<string, string>).phone} />
-                      <FieldRow label="Email" value={(lead.primary_contact as Record<string, string>).email} />
+                      <FieldRow label="Name"  value={(lead.primary_contact as unknown as Record<string, string>).name} />
+                      <FieldRow label="Title" value={(lead.primary_contact as unknown as Record<string, string>).title} />
+                      <FieldRow label="Phone" value={(lead.primary_contact as unknown as Record<string, string>).phone} />
+                      <FieldRow label="Email" value={(lead.primary_contact as unknown as Record<string, string>).email} />
                     </div>
                   )}
                 </>
@@ -719,7 +719,7 @@ export default function LeadDetail({ leadId, onBack, onNavigate }: LeadDetailPro
         <AppointmentModal
           isOpen={apptModalOpen}
           clientName={lead.name}
-          existing={lead.appointment_details as unknown as Record<string, string> | null ?? undefined}
+          existing={lead.appointment_details as unknown as AppointmentDetails ?? undefined}
           onClose={() => setApptModalOpen(false)}
           onSave={async (details) => {
             const updated = await updateLead(lead.id, { appointment_details: details as unknown as SalesLead["appointment_details"] });
