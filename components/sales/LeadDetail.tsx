@@ -136,7 +136,7 @@ export default function LeadDetail({ leadId, onBack, onNavigate }: LeadDetailPro
   // Derived: quotes and accepted quote check
   // Quotes stored in lead.quotes (jsonb array)
   const quotes: SavedQuote[] = (lead?.quotes as SavedQuote[]) ?? [];
-  const hasAcceptedQuote = quotes.some(q => q.status === "accepted");
+  const hasAcceptedQuote = quotes.some(q => q.status === "Accepted");
 
   async function handleStatusChange(status: string) {
     if (!lead) return;
