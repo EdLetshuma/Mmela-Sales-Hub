@@ -43,7 +43,7 @@ const STATUS_STYLES: Record<string, { bg: string; fg: string }> = {
 
 // ── Style factories ───────────────────────────────────────────
 
-function hdrStyle(bg = NAVY): XLSX.CellStyle {
+function hdrStyle(bg = NAVY): unknown {
   return {
     fill: { fgColor: { rgb: bg } },
     font: { bold: true, color: { rgb: WHITE }, sz: 10, name: "Calibri" },
@@ -62,7 +62,7 @@ function cellStyle(
   bold = false,
   align: "left" | "center" | "right" = "left",
   fg = DARK
-): XLSX.CellStyle {
+): unknown {
   return {
     fill: { fgColor: { rgb: bg } },
     font: { bold, color: { rgb: fg }, sz: 10, name: "Calibri" },
@@ -76,26 +76,26 @@ function cellStyle(
   };
 }
 
-function currStyle(bg = WHITE): XLSX.CellStyle {
-  return { ...cellStyle(bg, false, "right"), numFmt: '"R "#,##0.00' };
+function currStyle(bg = WHITE): unknown {
+  return { ...(cellStyle(bg, false, "right") as Record<string,unknown>), numFmt: '"R "#,##0.00' };
 }
 
-function pctStyle(bg = WHITE): XLSX.CellStyle {
-  return { ...cellStyle(bg, false, "right"), numFmt: '0.0"%"' };
+function pctStyle(bg = WHITE): unknown {
+  return { ...(cellStyle(bg, false, "right") as Record<string,unknown>), numFmt: '0.0"%"' };
 }
 
-function numStyle(bg = WHITE): XLSX.CellStyle {
-  return { ...cellStyle(bg, false, "right"), numFmt: "#,##0" };
+function numStyle(bg = WHITE): unknown {
+  return { ...(cellStyle(bg, false, "right") as Record<string,unknown>), numFmt: "#,##0" };
 }
 
-function statusStyle(value: string, bg: string): XLSX.CellStyle {
+function statusStyle(value: string, bg: string): unknown {
   const s = STATUS_STYLES[value];
   if (!s) return cellStyle(bg);
   return {
     fill: { fgColor: { rgb: s.bg } },
     font: { bold: true, color: { rgb: s.fg }, sz: 10, name: "Calibri" },
     alignment: { horizontal: "center", vertical: "center" },
-    border: cellStyle(bg).border,
+    border: (cellStyle(bg) as Record<string,unknown>).border,
   };
 }
 
@@ -161,7 +161,8 @@ async function buildWorkbook(
   let r = 0;
 
   const merge = (r1: number, c1: number, r2: number, c2: number) =>
-    (ws["!merges"] as XLSX.Range[]).push({ s: { r: r1, c: c1 }, e: { r: r2, c: c2 } });
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    (ws["!merges"] as any[]).push({ s: { r: r1, c: c1 }, e: { r: r2, c: c2 } });
 
   const enc = (row: number, col: number) => XLSX.utils.encode_cell({ r: row, c: col });
 
@@ -239,11 +240,13 @@ async function buildWorkbook(
   // ── Totals row ───────────────────────────────────────────
   const hasTotals = cols.some(c => c.type === "currency" || c.type === "number");
   if (hasTotals) {
-    const totStyle = { ...cellStyle(LBLUE, true, "right", NAVY), fill: { fgColor: { rgb: LBLUE } } };
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const totStyle: any = { ...(cellStyle(LBLUE, true, "right", NAVY) as Record<string,unknown>), fill: { fgColor: { rgb: LBLUE } } };
     cols.forEach((col, c) => {
       const ad = enc(r, c);
       if (c === 0) {
-        ws[ad] = { v: "TOTAL", t: "s", s: { ...cellStyle(LBLUE, true, "left", NAVY), fill: { fgColor: { rgb: LBLUE } } } };
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        ws[ad] = { v: "TOTAL", t: "s", s: { ...(cellStyle(LBLUE, true, "left", NAVY) as Record<string,unknown>), fill: { fgColor: { rgb: LBLUE } } } };
       } else if (col.type === "currency") {
         const total = rows.reduce((s, row) => s + (typeof row[c] === "number" ? (row[c] as number) : 0), 0);
         ws[ad] = { v: total, t: "n", s: { ...totStyle, numFmt: '"R "#,##0.00' } };
@@ -511,7 +514,8 @@ export async function generateReport(reportType: string): Promise<Uint8Array> {
 }
 
 export function downloadReport(data: Uint8Array, filename: string) {
-  const blob = new Blob([data], {
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const blob = new Blob([data as any], {
     type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
   });
   const url = URL.createObjectURL(blob);
