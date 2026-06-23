@@ -425,7 +425,7 @@ export default function LeadDetail({ leadId, onBack, onNavigate }: LeadDetailPro
                     { key: "pc_email", label: "Direct email"  },
                   ].map(({ key, label }) => {
                     const pcKey = key.replace("pc_", "") as string;
-                    const pcVal = ((lead.primary_contact as Record<string, string> | null)?.[pcKey]) ?? "";
+                    const pcVal = ((lead.primary_contact as unknown as Record<string, string> | null)?.[pcKey]) ?? "";
                     return (
                       <div key={key}>
                         <label className="text-xs text-gray-500 mb-1 block">{label}</label>
