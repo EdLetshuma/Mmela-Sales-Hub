@@ -142,7 +142,13 @@ function NotificationsSection({ isAdmin }: { isAdmin: boolean }) {
 // ── Security ──────────────────────────────────────────────────
 
 interface SessionRow { id: string; ip_address: string; user_agent: string; signed_in_at: string; refreshed_at: string; }
-interface AllSessionRow { session_id: string; user_id: string; user_name: string; user_email: string; user_role: string; ip_address: string; user_agent: string; signed_in_at: string; refreshed_at: string; }
+interface SessionSummaryRow {
+  user_id: string; user_name: string; user_email: string; user_role: string;
+  session_count: number; last_active: string | null;
+  current_session_id: string | null; current_ip: string | null; current_user_agent: string | null; current_signed_in_at: string | null;
+}
+
+const ACTIVE_WINDOW_MS = 24 * 60 * 60 * 1000;
 
 function parseUA(ua: string): { browser: string; os: string; device: string } {
   if (!ua) return { browser: "Unknown", os: "Unknown", device: "Desktop" };
@@ -196,28 +202,99 @@ function DeviceDetailCard({
   );
 }
 
+function UserSessionHistory({
+  userName, history, loading, onRevoke, revokingId,
+}: {
+  userName: string; history: SessionRow[]; loading: boolean;
+  onRevoke: (id: string) => void; revokingId: string | null;
+}) {
+  const [selected, setSelected] = useState<string | null>(null);
+  const selectedRow = history.find((h) => h.id === selected);
+
+  if (loading) return <div className="h-24 animate-pulse bg-gray-50 rounded-xl" />;
+  if (history.length === 0) return <p className="text-xs text-gray-400 px-1">No session history for {userName}.</p>;
+
+  return (
+    <div className="grid gap-2" style={{ gridTemplateColumns: selectedRow ? "1fr 1.5fr" : "1fr" }}>
+      <div className="space-y-1.5">
+        {history.map((s, i) => {
+          const p = parseUA(s.user_agent);
+          const active = selected === s.id;
+          return (
+            <button
+              key={s.id}
+              onClick={() => setSelected(active ? null : s.id)}
+              className="w-full flex items-center justify-between p-3 rounded-xl text-left transition-all"
+              style={{ background: active ? "#EEF4FD" : "#F8F9FB", border: `1px solid ${active ? "#B5D4F4" : "#E5E7EB"}` }}
+            >
+              <div>
+                <p className="text-xs font-medium text-gray-900">
+                  {p.browser} · {p.os} · {p.device}{i === 0 ? " (current)" : ""}
+                </p>
+                <p className="text-[10px] text-gray-400 mt-0.5">
+                  {s.ip_address || "—"} · Signed in {new Date(s.signed_in_at).toLocaleDateString("en-ZA", { day: "numeric", month: "short", year: "numeric" })}
+                </p>
+              </div>
+            </button>
+          );
+        })}
+      </div>
+      {selectedRow && (
+        <DeviceDetailCard
+          label={`${userName}'s device`}
+          ip={selectedRow.ip_address}
+          ua={selectedRow.user_agent}
+          signedIn={selectedRow.signed_in_at}
+          lastActive={selectedRow.refreshed_at}
+          onSignOut={() => onRevoke(selectedRow.id)}
+          signingOut={revokingId === selectedRow.id}
+        />
+      )}
+    </div>
+  );
+}
+
 function SecuritySection() {
   const { user } = useAuth();
   const isAdmin = user?.role === "Admin";
   const [mySessions, setMySessions] = useState<SessionRow[]>([]);
-  const [allSessions, setAllSessions] = useState<AllSessionRow[]>([]);
+  const [summary, setSummary] = useState<SessionSummaryRow[]>([]);
   const [signingOut, setSigningOut] = useState(false);
   const [revokingId, setRevokingId] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [selectedMine, setSelectedMine] = useState<string | null>(null);
-  const [selectedOther, setSelectedOther] = useState<string | null>(null);
+  const [selectedUserId, setSelectedUserId] = useState<string | null>(null);
+  const [userHistory, setUserHistory] = useState<SessionRow[]>([]);
+  const [historyLoading, setHistoryLoading] = useState(false);
 
   const load = useCallback(async () => {
     const { data: mine } = await supabase.rpc("get_my_sessions");
     setMySessions((mine as SessionRow[]) ?? []);
     if (isAdmin) {
-      const { data: all } = await supabase.rpc("get_all_sessions_admin");
-      setAllSessions((all as AllSessionRow[]) ?? []);
+      const { data: sum } = await supabase.rpc("get_sessions_summary_admin");
+      setSummary((sum as SessionSummaryRow[]) ?? []);
     }
     setLoading(false);
   }, [isAdmin]);
 
   useEffect(() => { load(); }, [load]);
+
+  const loadHistoryFor = useCallback(async (userId: string) => {
+    setHistoryLoading(true);
+    const { data } = await supabase.rpc("get_user_session_history_admin", { p_user_id: userId });
+    setUserHistory((data as SessionRow[]) ?? []);
+    setHistoryLoading(false);
+  }, []);
+
+  function toggleUser(userId: string) {
+    if (selectedUserId === userId) {
+      setSelectedUserId(null);
+      setUserHistory([]);
+      return;
+    }
+    setSelectedUserId(userId);
+    loadHistoryFor(userId);
+  }
 
   async function handleSignOutAll() {
     if (!window.confirm("Sign out of all sessions? You will be logged out immediately.")) return;
@@ -231,15 +308,42 @@ function SecuritySection() {
     try {
       await supabase.rpc("revoke_session", { target_session_id: sessionId });
       setSelectedMine((v) => (v === sessionId ? null : v));
-      setSelectedOther((v) => (v === sessionId ? null : v));
       await load();
+      if (selectedUserId) await loadHistoryFor(selectedUserId);
     } finally {
       setRevokingId(null);
     }
   }
 
   const mineSelected = mySessions.find((s) => s.id === selectedMine);
-  const otherSelected = allSessions.find((s) => s.session_id === selectedOther);
+  const now = Date.now();
+  const activeUsers = summary.filter((s) => s.last_active && now - new Date(s.last_active).getTime() < ACTIVE_WINDOW_MS);
+  const inactiveUsers = summary.filter((s) => !s.last_active || now - new Date(s.last_active).getTime() >= ACTIVE_WINDOW_MS);
+  const selectedUser = summary.find((s) => s.user_id === selectedUserId);
+
+  function UserRow({ s }: { s: SessionSummaryRow }) {
+    const p = parseUA(s.current_user_agent ?? "");
+    const active = selectedUserId === s.user_id;
+    return (
+      <button
+        onClick={() => toggleUser(s.user_id)}
+        className="w-full flex items-center justify-between p-3 rounded-xl text-left transition-all"
+        style={{ background: active ? "#EEF4FD" : "#F8F9FB", border: `1px solid ${active ? "#B5D4F4" : "#E5E7EB"}` }}
+      >
+        <div>
+          <p className="text-xs font-medium text-gray-900">{s.user_name} <span className="text-gray-400 font-normal">· {s.user_role}</span></p>
+          <p className="text-[10px] text-gray-400 mt-0.5">
+            {s.current_ip || "—"} · {p.device} · {p.browser} · {s.session_count} session{s.session_count !== 1 ? "s" : ""} on record
+          </p>
+        </div>
+        <p className="text-[10px] text-gray-400 whitespace-nowrap ml-3">
+          {s.last_active
+            ? `Last active ${new Date(s.last_active).toLocaleDateString("en-ZA", { day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" })}`
+            : "Never logged in"}
+        </p>
+      </button>
+    );
+  }
 
   return (
     <div className="space-y-5">
@@ -294,56 +398,85 @@ function SecuritySection() {
 
       {isAdmin && (
         <div className="space-y-2">
-          <p className="text-xs font-semibold text-gray-700">All active user sessions ({allSessions.length})</p>
-          {allSessions.length === 0 ? (
-            <p className="text-sm text-gray-400">No other active sessions.</p>
+          <p className="text-xs font-semibold text-gray-700">Active users ({activeUsers.length})</p>
+          <p className="text-[11px] text-gray-400 -mt-1">Active in the last 24 hours. Click a user to see their current session and full sign-in history.</p>
+          {activeUsers.length === 0 ? (
+            <p className="text-sm text-gray-400">No users active in the last 24 hours.</p>
           ) : (
-            <div className="grid gap-2" style={{ gridTemplateColumns: otherSelected ? "1fr 1.5fr" : "1fr" }}>
-              <div className="card p-0 overflow-hidden">
-                <div className="table-scroll">
-                  <table className="w-full text-xs border-collapse">
-                    <thead>
-                      <tr className="bg-gray-50 border-b border-gray-200">
-                        {["User", "Role", "IP address", "Device", "Signed in", "Last active"].map((h) => (
-                          <th key={h} className="px-3 py-2 text-left font-medium text-gray-500 whitespace-nowrap">{h}</th>
-                        ))}
-                      </tr>
-                    </thead>
-                    <tbody className="divide-y divide-gray-100">
-                      {allSessions.map((s) => {
-                        const p = parseUA(s.user_agent);
-                        const active = selectedOther === s.session_id;
-                        return (
-                          <tr
-                            key={s.session_id}
-                            className="hover:bg-gray-50 cursor-pointer"
-                            style={active ? { background: "#EEF4FD" } : undefined}
-                            onClick={() => setSelectedOther(active ? null : s.session_id)}
-                          >
-                            <td className="px-3 py-2 font-medium text-gray-900 whitespace-nowrap">{s.user_name}</td>
-                            <td className="px-3 py-2 text-gray-500">{s.user_role}</td>
-                            <td className="px-3 py-2 font-mono text-gray-700">{s.ip_address || "—"}</td>
-                            <td className="px-3 py-2 text-gray-500">{p.device} · {p.browser}</td>
-                            <td className="px-3 py-2 text-gray-400 whitespace-nowrap">{new Date(s.signed_in_at).toLocaleDateString("en-ZA", { day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" })}</td>
-                            <td className="px-3 py-2 text-gray-400 whitespace-nowrap">{s.refreshed_at ? new Date(s.refreshed_at).toLocaleDateString("en-ZA", { day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" }) : "—"}</td>
-                          </tr>
-                        );
-                      })}
-                    </tbody>
-                  </table>
+            <div className="space-y-1.5">
+              {activeUsers.map((s) => (
+                <div key={s.user_id}>
+                  <UserRow s={s} />
+                  {selectedUserId === s.user_id && (
+                    <div className="mt-1.5 pl-1">
+                      <UserSessionHistory
+                        userName={s.user_name}
+                        history={userHistory}
+                        loading={historyLoading}
+                        revokingId={revokingId}
+                        onRevoke={(id) => handleRevoke(id, false)}
+                      />
+                    </div>
+                  )}
                 </div>
+              ))}
+            </div>
+          )}
+        </div>
+      )}
+
+      {isAdmin && (
+        <div className="space-y-2">
+          <p className="text-xs font-semibold text-gray-700">Inactive users ({inactiveUsers.length})</p>
+          <p className="text-[11px] text-gray-400 -mt-1">Not active in the last 24 hours — shows when they last logged in.</p>
+          {inactiveUsers.length === 0 ? (
+            <p className="text-sm text-gray-400">All users are currently active.</p>
+          ) : (
+            <div className="card p-0 overflow-hidden">
+              <div className="table-scroll">
+                <table className="w-full text-xs border-collapse">
+                  <thead>
+                    <tr className="bg-gray-50 border-b border-gray-200">
+                      {["User", "Role", "Sessions on record", "Last active"].map((h) => (
+                        <th key={h} className="px-3 py-2 text-left font-medium text-gray-500 whitespace-nowrap">{h}</th>
+                      ))}
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-gray-100">
+                    {inactiveUsers.map((s) => (
+                      <React.Fragment key={s.user_id}>
+                        <tr
+                          className="hover:bg-gray-50 cursor-pointer"
+                          style={selectedUserId === s.user_id ? { background: "#EEF4FD" } : undefined}
+                          onClick={() => toggleUser(s.user_id)}
+                        >
+                          <td className="px-3 py-2 font-medium text-gray-900 whitespace-nowrap">{s.user_name}</td>
+                          <td className="px-3 py-2 text-gray-500">{s.user_role}</td>
+                          <td className="px-3 py-2 text-gray-500">{s.session_count}</td>
+                          <td className="px-3 py-2 text-gray-400 whitespace-nowrap">
+                            {s.last_active
+                              ? new Date(s.last_active).toLocaleDateString("en-ZA", { day: "numeric", month: "short", year: "numeric", hour: "2-digit", minute: "2-digit" })
+                              : "Never logged in"}
+                          </td>
+                        </tr>
+                        {selectedUserId === s.user_id && (
+                          <tr>
+                            <td colSpan={4} className="px-3 py-2" style={{ background: "#FAFBFC" }}>
+                              <UserSessionHistory
+                                userName={s.user_name}
+                                history={userHistory}
+                                loading={historyLoading}
+                                revokingId={revokingId}
+                                onRevoke={(id) => handleRevoke(id, false)}
+                              />
+                            </td>
+                          </tr>
+                        )}
+                      </React.Fragment>
+                    ))}
+                  </tbody>
+                </table>
               </div>
-              {otherSelected && (
-                <DeviceDetailCard
-                  label={`${otherSelected.user_name}'s device`}
-                  ip={otherSelected.ip_address}
-                  ua={otherSelected.user_agent}
-                  signedIn={otherSelected.signed_in_at}
-                  lastActive={otherSelected.refreshed_at}
-                  onSignOut={() => handleRevoke(otherSelected.session_id, false)}
-                  signingOut={revokingId === otherSelected.session_id}
-                />
-              )}
             </div>
           )}
         </div>
