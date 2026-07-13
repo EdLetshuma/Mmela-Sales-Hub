@@ -325,7 +325,7 @@ function CampaignModal({
       if (isEditing) {
         await updateCampaign(campaign.id, payload);
       } else {
-        await createCampaign(payload as any);
+        await createCampaign(payload);
       }
 
       onSaved();

@@ -87,7 +87,7 @@ export default function FormBuilder({ formId, onBack }: FormBuilderProps) {
           field_type: f.field_type,
           placeholder: f.placeholder || "",
           is_required: f.is_required,
-          options: f.options ? (f.options as any).items || [] : [],
+          options: f.options ? (f.options as { items?: string[] }).items || [] : [],
           display_order: f.display_order,
         }))
       );
@@ -146,15 +146,15 @@ export default function FormBuilder({ formId, onBack }: FormBuilderProps) {
         field_key: f.field_key,
         label: f.label,
         field_type: f.field_type,
-        placeholder: f.placeholder || null,
+        placeholder: f.placeholder || undefined,
         is_required: f.is_required,
         options:
-          f.options.length > 0 ? { items: f.options } : null,
-        validation_rules: null,
+          f.options.length > 0 ? { items: f.options } : undefined,
+        validation_rules: undefined,
         display_order: i,
       }));
 
-      await upsertFormFields(formId, payload as any);
+      await upsertFormFields(formId, payload);
       setSaved(true);
       setTimeout(() => setSaved(false), 2000);
     } catch (err) {

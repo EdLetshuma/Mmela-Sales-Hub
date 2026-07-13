@@ -76,7 +76,7 @@ export default function RoutingRules() {
                   </span>
                   {rule.campaign_id && (
                     <span className="badge bg-gray-100 text-gray-600">
-                      {getName(campaigns as any, rule.campaign_id)}
+                      {getName(campaigns, rule.campaign_id)}
                     </span>
                   )}
                   <span className={`badge ${rule.is_active ? "badge-contacted" : "bg-gray-100 text-gray-500"}`}>
@@ -140,7 +140,7 @@ function CreateRuleModal({ units, campaigns, users, onClose, onSaved }: {
         method,
         assigned_user_ids: Array.from(selectedUsers),
         is_active: true,
-      } as any);
+      });
       onSaved();
     } catch (err) { console.error(err); }
     finally { setIsSaving(false); }

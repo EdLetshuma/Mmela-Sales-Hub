@@ -178,7 +178,7 @@ function TestRunModal({ mailing, onClose }: { mailing: ExtendedMailing; onClose:
         </div>
 
         <p className="text-sm text-gray-600 mb-4">
-          Send a test version of this mailing to a single email address. Recipients won't be notified and the last-sent date won't update.
+          Send a test version of this mailing to a single email address. Recipients won&apos;t be notified and the last-sent date won&apos;t update.
         </p>
 
         {result && (

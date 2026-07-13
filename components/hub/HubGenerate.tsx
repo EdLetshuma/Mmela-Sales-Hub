@@ -318,14 +318,23 @@ async function exportCustomReport(
   selectedCols: string[],
   title: string
 ): Promise<void> {
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const XLSX = await new Promise<any>((resolve, reject) => {
+  interface XlsxGlobal {
+    utils: {
+      encode_cell: (addr: { r: number; c: number }) => string;
+      encode_range: (range: { s: { r: number; c: number }; e: { r: number; c: number } }) => string;
+      book_new: () => Record<string, unknown>;
+      book_append_sheet: (wb: Record<string, unknown>, ws: Record<string, unknown>, name: string) => void;
+    };
+    write: (wb: Record<string, unknown>, opts: { type: string; bookType: string }) => ArrayBuffer;
+  }
+  const getXlsxGlobal = () => (window as unknown as { XLSX: XlsxGlobal }).XLSX;
+  const XLSX = await new Promise<XlsxGlobal>((resolve, reject) => {
     const existing = document.querySelector("script[data-xlsx]");
-    if (existing) { resolve((window as unknown as { XLSX: any }).XLSX); return; }
+    if (existing) { resolve(getXlsxGlobal()); return; }
     const s = document.createElement("script");
     s.src = "https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js";
     s.setAttribute("data-xlsx", "true");
-    s.onload = () => resolve((window as unknown as { XLSX: any }).XLSX);
+    s.onload = () => resolve(getXlsxGlobal());
     s.onerror = reject;
     document.head.appendChild(s);
   });

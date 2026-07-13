@@ -202,7 +202,7 @@ export default function LeadInbox() {
         </select>
         <select
           value={filterAssigned}
-          onChange={(e) => setFilterAssigned(e.target.value as any)}
+          onChange={(e) => setFilterAssigned(e.target.value as "" | "assigned" | "unassigned")}
           className="input-field w-auto"
         >
           <option value="">All leads</option>

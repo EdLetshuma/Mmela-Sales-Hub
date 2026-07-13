@@ -186,7 +186,7 @@ function NotificationsSection({ isAdmin }: { isAdmin: boolean }) {
                 })}
               </div>
               {(rule.recipient_roles ?? []).length === 0 && (
-                <p className="text-xs text-red-400 mt-1.5">⚠ No recipients — this notification won't be sent</p>
+                <p className="text-xs text-red-400 mt-1.5">⚠ No recipients — this notification won&apos;t be sent</p>
               )}
             </div>
           </div>

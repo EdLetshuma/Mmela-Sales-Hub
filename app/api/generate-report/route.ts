@@ -519,7 +519,7 @@ export async function POST(req: NextRequest) {
     // Fetch logo and report data in parallel
     const [logo, reportData] = await Promise.all([
       fetchLogo(),
-      getReportData(admin as any, report_type),
+      getReportData(admin as ReturnType<typeof createClient>, report_type),
     ]);
 
     // Build XLSX

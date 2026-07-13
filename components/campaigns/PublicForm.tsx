@@ -117,7 +117,7 @@ export default function PublicForm({ slug }: PublicFormProps) {
 
       const params = new URLSearchParams(window.location.search);
 
-      const campaignData = (form as any).campaigns;
+      const campaignData = (form as Form & { campaigns?: { business_unit_id?: string } }).campaigns;
       const businessUnitId = campaignData?.business_unit_id || "";
 
       await submitPublicLead({
@@ -186,10 +186,9 @@ export default function PublicForm({ slug }: PublicFormProps) {
     );
   }
 
-  const campaignName =
-    (form as any)?.campaigns?.name || "";
-  const businessUnitName =
-    (form as any)?.campaigns?.business_units?.name || "";
+  const formWithCampaign = form as (Form & { campaigns?: { name?: string; business_units?: { name?: string } } }) | null;
+  const campaignName = formWithCampaign?.campaigns?.name || "";
+  const businessUnitName = formWithCampaign?.campaigns?.business_units?.name || "";
 
   return (
     <div className="min-h-screen bg-gray-50 flex items-center justify-center p-4">
@@ -288,7 +287,7 @@ function renderField(
         />
       );
     case FieldType.Select:
-      const selectOptions = (field.options as any)?.items || [];
+      const selectOptions = (field.options as { items?: string[] } | undefined)?.items || [];
       return (
         <select
           value={value}
@@ -305,7 +304,7 @@ function renderField(
         </select>
       );
     case FieldType.Radio:
-      const radioOptions = (field.options as any)?.items || [];
+      const radioOptions = (field.options as { items?: string[] } | undefined)?.items || [];
       return (
         <div className="space-y-2">
           {radioOptions.map((opt: string, i: number) => (

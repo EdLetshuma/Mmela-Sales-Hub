@@ -56,7 +56,7 @@ export default function FormList({ onEditForm }: FormListProps) {
         getCampaigns(),
         getBusinessUnits(),
       ]);
-      setForms(formData as any);
+      setForms(formData);
       setCampaigns(campaignData);
       setUnits(unitData);
     } catch (err) {
@@ -152,8 +152,8 @@ export default function FormList({ onEditForm }: FormListProps) {
       ) : (
         <div className="space-y-3">
           {filtered.map((form) => {
-            const campaignName = (form as any).campaigns?.name || "—";
-            const unitId = (form as any).campaigns?.business_unit_id;
+            const campaignName = form.campaigns?.name || "—";
+            const unitId = form.campaigns?.business_unit_id;
             const unitName = unitId ? getUnitName(unitId) : "";
 
             return (
@@ -364,7 +364,7 @@ function CreateFormModal({
         thank_you_message: thankYou,
         is_active: true,
         created_by_user_id: userId,
-      } as any);
+      });
 
       onSaved(form.id);
     } catch (err: unknown) {

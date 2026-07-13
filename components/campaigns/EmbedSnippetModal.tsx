@@ -225,7 +225,7 @@ export default function EmbedSnippetModal({
             <p>Paste this code into the HTML of any webpage where you want the form to appear. Works with WordPress, Wix, Webflow, or plain HTML.</p>
           )}
           {embedType === "link" && (
-            <p>Drop this HTML snippet anywhere in your page. The button opens the form in a new browser tab so visitors don't leave your site.</p>
+            <p>Drop this HTML snippet anywhere in your page. The button opens the form in a new browser tab so visitors don&apos;t leave your site.</p>
           )}
           {embedType === "popup" && (
             <p>Paste both the button and the modal div into your page HTML. Clicking the button opens the form as an overlay without any page navigation.</p>

@@ -37,7 +37,7 @@ export default function SalesTrendChart({ policies, userId, year }: SalesTrendCh
 
       const min = new Date(Math.min(...dates.map((d) => d.getTime())));
       const max = new Date(Math.max(...dates.map((d) => d.getTime())));
-      let cur = new Date(min.getFullYear(), min.getMonth(), 1);
+      const cur = new Date(min.getFullYear(), min.getMonth(), 1);
       while (cur <= max) {
         const key = `${MONTHS[cur.getMonth()]} '${String(cur.getFullYear()).slice(2)}`;
         map[key] = 0;

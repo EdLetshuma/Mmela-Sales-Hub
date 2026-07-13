@@ -73,7 +73,7 @@ async function parseXLSX(buffer: ArrayBuffer): Promise<{ headers: string[]; rows
       document.head.appendChild(s);
     });
   }
-  const XLSX = (window as unknown as { XLSX: { read: Function; utils: { sheet_to_json: Function } } }).XLSX;
+  const XLSX = (window as unknown as { XLSX: { read: (buf: ArrayBuffer, opts: { type: string }) => { Sheets: Record<string, unknown>; SheetNames: string[] }; utils: { sheet_to_json: (ws: unknown, opts: { header: number; defval: string }) => string[][] } } }).XLSX;
   const wb = XLSX.read(buffer, { type: "array" });
   const ws = wb.Sheets[wb.SheetNames[0]];
   const data: string[][] = XLSX.utils.sheet_to_json(ws, { header: 1, defval: "" });
@@ -253,7 +253,7 @@ export default function LeadImportWizard({ onBack, onDone }: { onBack: () => voi
                 </button>
                 <h2 className="text-base font-semibold text-gray-900">Import leads</h2>
               </div>
-              <p className="text-xs text-gray-400 ml-7">Import from CSV or Excel. We'll map your columns, validate and preview before anything is saved.</p>
+              <p className="text-xs text-gray-400 ml-7">Import from CSV or Excel. We&apos;ll map your columns, validate and preview before anything is saved.</p>
             </div>
           </div>
 
@@ -374,7 +374,7 @@ export default function LeadImportWizard({ onBack, onDone }: { onBack: () => voi
           {step === 1 && (
             <div className="space-y-4">
               <div className="p-3 rounded-lg text-xs" style={{ background: "#EEF4FD", color: "#1A348C" }}>
-                We detected <strong>{headers.length} columns</strong> and <strong>{rawRows.length} rows</strong>. Map each column to a lead field below. Columns marked "Skip" won't be imported.
+                We detected <strong>{headers.length} columns</strong> and <strong>{rawRows.length} rows</strong>. Map each column to a lead field below. Columns marked &quot;Skip&quot; won&apos;t be imported.
               </div>
               <div className="space-y-2">
                 {headers.map(h => (
@@ -400,7 +400,7 @@ export default function LeadImportWizard({ onBack, onDone }: { onBack: () => voi
               {!Object.values(mapping).includes("name") && (
                 <div className="p-3 rounded-lg flex items-center gap-2 text-xs" style={{ background: "#FCEBEB", color: "#791F1F" }}>
                   <AlertCircle className="w-4 h-4 flex-shrink-0" />
-                  You must map at least one column to "Full name" before continuing.
+                  You must map at least one column to &quot;Full name&quot; before continuing.
                 </div>
               )}
             </div>

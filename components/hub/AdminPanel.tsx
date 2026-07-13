@@ -504,7 +504,7 @@ export default function AdminPanel() {
           </div>
 
           <p className="text-xs text-gray-400">
-            To create a new user's login credentials, use the Supabase dashboard (Authentication → Users), then their profile will appear here automatically.
+            To create a new user&apos;s login credentials, use the Supabase dashboard (Authentication → Users), then their profile will appear here automatically.
           </p>
         </div>
       )}
