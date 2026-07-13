@@ -44,6 +44,8 @@ function StatusBadge({ status }: { status?: string }) {
 export default function PolicyDetail({ policyId, onBack }: PolicyDetailProps) {
   const { user } = useAuth();
   const canEdit = user?.role === "Admin" || (user?.permissions ?? []).includes(Permission.EditPolicies);
+  // Policy number is Admin-only — Policy Admin (and other EditPolicies holders) can edit everything else
+  const canEditPolicyNumber = user?.role === "Admin";
 
   const [policy, setPolicy] = useState<SalesPolicy | null>(null);
   const [clientName, setClientName] = useState<string>("—");
@@ -180,6 +182,7 @@ export default function PolicyDetail({ policyId, onBack }: PolicyDetailProps) {
                   className="btn btn-secondary text-xs"
                   onClick={() => {
                     setEditForm({
+                      ...(canEditPolicyNumber ? { policy_number: policy.policy_number } : {}),
                       insurer: policy.insurer,
                       product_name: policy.product_name,
                       product_category: policy.product_category,
@@ -234,6 +237,18 @@ export default function PolicyDetail({ policyId, onBack }: PolicyDetailProps) {
           {editing ? (
             <div className="space-y-3">
               <h2 className="text-sm font-semibold text-gray-900">Edit policy</h2>
+              {canEditPolicyNumber && (
+                <div>
+                  <label className="text-xs text-gray-500 mb-1 block">Policy number</label>
+                  <input
+                    className="input-field"
+                    type="text"
+                    value={(editForm.policy_number as string) ?? ""}
+                    onChange={(e) => setEditForm((f) => ({ ...f, policy_number: e.target.value }))}
+                  />
+                  <p className="text-[11px] text-amber-600 mt-1">Admin only — changing this does not update linked records automatically.</p>
+                </div>
+              )}
               {([
                 { key: "insurer", label: "Insurer", type: "text" },
                 { key: "product_name", label: "Product name", type: "text" },

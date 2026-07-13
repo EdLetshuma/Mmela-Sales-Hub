@@ -2,7 +2,7 @@
 
 import React, { useEffect, useState } from "react";
 import { ArrowLeft, Plus, UserCheck } from "lucide-react";
-import { getLead, updateLead, convertLeadToClient, getSalesUsers, assignLead, type SalesLead, type SalesUser } from "@/lib/sales-api";
+import { getLead, updateLead, convertLeadToClient, getSalesUsers, assignLead, getClient, type SalesLead, type SalesUser } from "@/lib/sales-api";
 import { getSystemSettings, type SystemSettings } from "@/lib/settings-api";
 import QuoteModal, { type SavedQuote, type QuoteFormData } from "@/components/sales/QuoteModal";
 import AcceptQuoteModal from "@/components/sales/AcceptQuoteModal";
@@ -117,6 +117,7 @@ export default function LeadDetail({ leadId, onBack, onNavigate }: LeadDetailPro
   const [settings, setSettings] = useState<SystemSettings | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [convertedAt, setConvertedAt] = useState<string | null>(null);
 
   // Segment awareness
   const { user } = useAuth();
@@ -144,7 +145,12 @@ export default function LeadDetail({ leadId, onBack, onNavigate }: LeadDetailPro
   useEffect(() => {
     setLoading(true);
     Promise.all([getLead(leadId), getSalesUsers(), getSystemSettings()])
-      .then(([l, u, s]) => { setLead(l); setUsers(u); setSettings(s); })
+      .then(([l, u, s]) => {
+        setLead(l); setUsers(u); setSettings(s);
+        if (l?.client_id) {
+          getClient(l.client_id).then((c) => setConvertedAt(c?.join_date ?? null));
+        }
+      })
       .catch(() => setError("Failed to load lead."))
       .finally(() => setLoading(false));
   }, [leadId]);
@@ -304,6 +310,10 @@ export default function LeadDetail({ leadId, onBack, onNavigate }: LeadDetailPro
               <h1 className="text-lg font-semibold text-gray-900 leading-tight">{lead.name}</h1>
               {displayEmail && <p className="text-sm text-gray-500 mt-0.5">{displayEmail}</p>}
               {lead.phone && <p className="text-sm text-gray-500">{lead.phone}</p>}
+              <p className="text-xs text-gray-400 mt-1">
+                Added {lead.created_at ? new Date(lead.created_at).toLocaleDateString("en-ZA", { day: "numeric", month: "short", year: "numeric" }) : "—"}
+                {convertedAt && ` · Converted ${new Date(convertedAt).toLocaleDateString("en-ZA", { day: "numeric", month: "short", year: "numeric" })}`}
+              </p>
             </div>
           </div>
           <div className="flex items-center gap-2 flex-wrap justify-end">
@@ -352,16 +362,6 @@ export default function LeadDetail({ leadId, onBack, onNavigate }: LeadDetailPro
         <div className="mt-4 pt-4" style={{ borderTop: "1px solid #F1F3F5" }}>
           <div className="flex items-center gap-2 mb-2">
             <span className="text-xs text-gray-400">Change status</span>
-            {lead.status === "Won" && (
-              <span className="text-[10px] px-2 py-0.5 rounded-full font-medium" style={{ background: "#EAF3DE", color: "#27500A" }}>
-                Won — final status. Cancel individual policies from the client profile instead.
-              </span>
-            )}
-            {lead.status === "Lost" && (
-              <span className="text-[10px] px-2 py-0.5 rounded-full font-medium" style={{ background: "#FCEBEB", color: "#791F1F" }}>
-                Lost — final status. Recycled leads will be managed under Outreach.
-              </span>
-            )}
           </div>
           <div className="flex gap-1.5 flex-wrap">
             {STATUSES.map((s) => {
@@ -631,6 +631,16 @@ export default function LeadDetail({ leadId, onBack, onNavigate }: LeadDetailPro
                       )}
 
                       {/* Actions */}
+                      {quote.status === "Accepted" && isConverted && (
+                        <div className="flex mt-3 pt-3" style={{ borderTop: "1px solid #F1F3F5" }}>
+                          <button
+                            className="btn btn-secondary text-xs"
+                            onClick={() => onNavigate(`/sales/clients/${lead.client_id}`)}
+                          >
+                            View policy
+                          </button>
+                        </div>
+                      )}
                       {quote.status === "Pending" && !isTerminal && (
                         <div className="flex gap-2 mt-3 pt-3" style={{ borderTop: "1px solid #F1F3F5" }}>
                           <button
@@ -677,15 +687,7 @@ export default function LeadDetail({ leadId, onBack, onNavigate }: LeadDetailPro
             ) : (
               <p className="text-xs text-gray-400 mb-3">Unassigned</p>
             )}
-            {isConverted ? (
-              <p className="text-xs text-gray-400">
-                This lead has converted to a client — reassign the client instead from their profile.
-              </p>
-            ) : lead.status === "Lost" ? (
-              <p className="text-xs text-gray-400">
-                This lead is Lost and can no longer be reassigned.
-              </p>
-            ) : (
+            {!isConverted && lead.status !== "Lost" && (
               <select
                 className="input-field text-xs"
                 defaultValue=""
