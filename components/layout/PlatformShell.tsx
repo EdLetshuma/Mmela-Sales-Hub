@@ -1,17 +1,18 @@
 "use client";
 
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useRef } from "react";
 import { useAuth } from "@/components/providers/AuthProvider";
 import TopNav from "@/components/layout/TopNav";
 import ModuleHome from "@/components/layout/ModuleHome";
 import { MODULE_CONFIG } from "@/lib/modules";
-import type { ClientSegment } from "@/types";
+import type { ClientSegment, MmelaModule } from "@/types";
 import { UserSpecialization } from "@/types";
 
 export default function PlatformShell() {
-  const { user, activeModule, setActiveModule } = useAuth();
+  const { user, activeModule, setActiveModule, accessibleModules } = useAuth();
   const [segment, setSegment] = useState<ClientSegment>("Individual");
   const [activePath, setActivePath] = useState("");
+  const restoredRef = useRef(false);
 
   // Derive whether this user can toggle segments
   // Agents locked to one specialization cannot switch
@@ -29,25 +30,41 @@ export default function PlatformShell() {
     }
   }, [user?.id]);
 
-  // Set default path when module changes
+  // On first render after login, restore module + path from the actual
+  // URL (so refreshes and shared/bookmarked links land on the right
+  // page) instead of always resetting to the module's default path.
   useEffect(() => {
-    const mod = MODULE_CONFIG[activeModule];
-    setActivePath(mod.defaultPath);
-  }, [activeModule]);
+    if (!user || restoredRef.current) return;
+    restoredRef.current = true;
 
-  // Push state to browser history so back button works
+    const path = window.location.pathname;
+    const segId = path.split("/").filter(Boolean)[0];
+    const mod = accessibleModules.find((m) => m.id === segId);
+
+    if (mod) {
+      if (mod.id !== activeModule) setActiveModule(mod.id as MmelaModule);
+      setActivePath(path);
+      window.history.replaceState({ path, module: mod.id }, "", path);
+    } else {
+      const defaultPath = MODULE_CONFIG[activeModule].defaultPath;
+      setActivePath(defaultPath);
+      window.history.replaceState({ path: defaultPath, module: activeModule }, "", defaultPath);
+    }
+  }, [user, accessibleModules, activeModule, setActiveModule]);
+
+  // Push real URLs to browser history so links are shareable/bookmarkable
+  // and the back/forward buttons work as expected.
   function navigate(path: string) {
-    window.history.pushState({ path, module: activeModule }, "", "");
+    window.history.pushState({ path, module: activeModule }, "", path);
     setActivePath(path);
   }
 
   // Listen for browser back/forward
   useEffect(() => {
     function onPop(e: PopStateEvent) {
-      if (e.state?.path) {
-        setActivePath(e.state.path);
-        if (e.state.module) setActiveModule(e.state.module);
-      }
+      const path = e.state?.path ?? window.location.pathname;
+      setActivePath(path);
+      if (e.state?.module) setActiveModule(e.state.module);
     }
     window.addEventListener("popstate", onPop);
     return () => window.removeEventListener("popstate", onPop);
@@ -67,10 +84,10 @@ export default function PlatformShell() {
         <main
         style={{
           padding: "20px 16px",
-          maxWidth: 1400,
+          width: "100%",
           margin: "0 auto",
-          paddingLeft: "clamp(12px, 3vw, 24px)",
-          paddingRight: "clamp(12px, 3vw, 24px)",
+          paddingLeft: "clamp(16px, 2vw, 32px)",
+          paddingRight: "clamp(16px, 2vw, 32px)",
         }}
       >
           <ModuleHome

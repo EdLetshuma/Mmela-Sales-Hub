@@ -3,6 +3,7 @@
 import React, { useState } from "react";
 import { X, ExternalLink } from "lucide-react";
 import type { SalesPolicy } from "@/lib/sales-api";
+import CancelPolicyModal from "@/components/sales/CancelPolicyModal";
 
 interface PolicyDetailModalProps {
   isOpen: boolean;
@@ -54,6 +55,32 @@ export default function PolicyDetailModal({
   const [editingLink, setEditingLink] = useState(false);
   const [linkValue, setLinkValue] = useState(policy.document_link ?? "");
   const [savingLink, setSavingLink] = useState(false);
+  const [cancelModalOpen, setCancelModalOpen] = useState(false);
+  const [cancelling, setCancelling] = useState(false);
+
+  const canCancel = policy.status === "Active" || policy.status === "Pending";
+
+  async function handleCancelPolicy(reason: string, notes: string) {
+    setCancelling(true);
+    try {
+      const existingNotes = Array.isArray(policy.notes) ? policy.notes : [];
+      await onUpdatePolicy({
+        status: "Canceled",
+        cancellation_date: new Date().toISOString().slice(0, 10),
+        notes: [
+          ...existingNotes,
+          {
+            text: `Policy cancelled — ${reason}${notes ? `: ${notes}` : ""}`,
+            timestamp: new Date().toISOString(),
+          },
+        ] as unknown as SalesPolicy["notes"],
+      });
+      setCancelModalOpen(false);
+      onClose();
+    } finally {
+      setCancelling(false);
+    }
+  }
 
   async function handleSaveLink() {
     setSavingLink(true);
@@ -102,6 +129,15 @@ export default function PolicyDetailModal({
           </div>
           <div className="flex gap-2">
             <button className="btn btn-secondary text-xs" onClick={onEdit}>Edit</button>
+            {canCancel && (
+              <button
+                className="btn text-xs text-white"
+                style={{ background: "#A32D2D" }}
+                onClick={() => setCancelModalOpen(true)}
+              >
+                Cancel policy
+              </button>
+            )}
             <button className="btn btn-ghost p-1" onClick={onClose}><X className="w-4 h-4" /></button>
           </div>
         </div>
@@ -176,6 +212,16 @@ export default function PolicyDetailModal({
                       </div>
                     ))}
                   </div>
+                </div>
+              )}
+
+              {/* Cancellation reason */}
+              {policy.status === "Canceled" && Array.isArray(policy.notes) && policy.notes.length > 0 && (
+                <div className="mt-4 p-3 rounded-lg" style={{ background: "#FCEBEB", border: "1px solid #F3B4B4" }}>
+                  <p className="text-xs font-semibold mb-1" style={{ color: "#791F1F" }}>Cancellation reason</p>
+                  <p className="text-xs" style={{ color: "#791F1F" }}>
+                    {(policy.notes[policy.notes.length - 1] as { text?: string })?.text ?? "—"}
+                  </p>
                 </div>
               )}
 
@@ -259,6 +305,14 @@ export default function PolicyDetailModal({
           <button className="btn btn-secondary" onClick={onClose}>Close</button>
         </div>
       </div>
+
+      <CancelPolicyModal
+        isOpen={cancelModalOpen}
+        onClose={() => setCancelModalOpen(false)}
+        onSave={handleCancelPolicy}
+        policyNumber={policy.policy_number}
+        saving={cancelling}
+      />
     </div>
   );
 }

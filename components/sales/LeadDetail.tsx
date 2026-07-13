@@ -27,12 +27,14 @@ const STATUS_RANK: Record<string, number> = {
 // Which transitions are allowed from each status
 // Rules:
 //   - Can always move forward in the pipeline
-//   - Can always mark Lost from any status
+//   - Can always mark Lost before Won
+//   - Won is terminal — a client isn't "lost"; cancel the relevant
+//     policy instead (from the client's Policies list) with a reason
 //   - If Lost, can only re-open to Contacted (re-engage)
 //   - Cannot go back to Prospect once Quoted or Won
 //   - Cannot go to Won without at least one accepted quote
 function getAllowedTransitions(current: string, hasAcceptedQuote: boolean): string[] {
-  if (current === "Won") return ["Lost"];          // Won is terminal except for loss
+  if (current === "Won") return [];                // Won is terminal
   if (current === "Lost") return ["Contacted"];    // Can only re-engage, not restart
   const currentRank = STATUS_RANK[current] ?? 0;
   return STATUSES.filter(s => {
@@ -49,6 +51,7 @@ function getStatusTooltip(target: string, current: string, hasAcceptedQuote: boo
   if (target === "Won" && !hasAcceptedQuote) return "Requires an accepted quote first";
   if (target === "Prospect" && STATUS_RANK[current] >= 2) return "Cannot return to Prospect once Quoted";
   if (target === "Contacted" && current === "Won") return "Cannot return to Contacted from Won";
+  if (target === "Lost" && current === "Won") return "A client can't be marked Lost — cancel the relevant policy instead";
   return "";
 }
 
@@ -332,7 +335,7 @@ export default function LeadDetail({ leadId, onBack, onNavigate }: LeadDetailPro
             <span className="text-xs text-gray-400">Change status</span>
             {lead.status === "Won" && (
               <span className="text-[10px] px-2 py-0.5 rounded-full font-medium" style={{ background: "#EAF3DE", color: "#27500A" }}>
-                Won — only loss is possible from here
+                Won — final status. Cancel individual policies from the client profile instead.
               </span>
             )}
             {lead.status === "Lost" && (
@@ -655,18 +658,24 @@ export default function LeadDetail({ leadId, onBack, onNavigate }: LeadDetailPro
             ) : (
               <p className="text-xs text-gray-400 mb-3">Unassigned</p>
             )}
-            <select
-              className="input-field text-xs"
-              defaultValue=""
-              onChange={(e) => { if (e.target.value) handleAssign(e.target.value); }}
-            >
-              <option value="">Reassign…</option>
-              {users
-                .filter((u) => ["Sales Agent", "Team Leader", "Manager"].includes(u.role))
-                .map((u) => (
-                  <option key={u.id} value={u.id}>{u.name}</option>
-                ))}
-            </select>
+            {isConverted ? (
+              <p className="text-xs text-gray-400">
+                This lead has converted to a client — reassign the client instead from their profile.
+              </p>
+            ) : (
+              <select
+                className="input-field text-xs"
+                defaultValue=""
+                onChange={(e) => { if (e.target.value) handleAssign(e.target.value); }}
+              >
+                <option value="">Reassign…</option>
+                {users
+                  .filter((u) => ["Sales Agent", "Team Leader", "Manager"].includes(u.role))
+                  .map((u) => (
+                    <option key={u.id} value={u.id}>{u.name}</option>
+                  ))}
+              </select>
+            )}
           </div>
 
           {/* Notes */}
