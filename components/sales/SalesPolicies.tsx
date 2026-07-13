@@ -4,13 +4,12 @@ import React, { useEffect, useState, useCallback } from "react";
 import { Search, ChevronRight, Trash2 } from "lucide-react";
 import {
   getPolicies, getClients, getSalesUsers, createPolicy,
-  updatePolicy, deletePolicy, type SalesPolicy, type SalesClient, type SalesUser,
+  deletePolicy, type SalesPolicy, type SalesClient, type SalesUser,
 } from "@/lib/sales-api";
 import { useAuth } from "@/components/providers/AuthProvider";
 import { getSystemSettings, type SystemSettings } from "@/lib/settings-api";
 import type { ClientSegment } from "@/types";
 import AddPolicyModal, { type NewPolicyData } from "@/components/sales/AddPolicyModal";
-import PolicyDetailModal from "@/components/sales/PolicyDetailModal";
 
 interface SalesPoliciesProps {
   segment: ClientSegment;
@@ -68,7 +67,6 @@ export default function SalesPolicies({ segment, onViewPolicy }: SalesPoliciesPr
 
   // Modals
   const [addModalOpen, setAddModalOpen] = useState(false);
-  const [detailPolicy, setDetailPolicy] = useState<SalesPolicy | null>(null);
 
   const fetchAll = useCallback(async () => {
     setLoading(true);
@@ -106,13 +104,6 @@ export default function SalesPolicies({ segment, onViewPolicy }: SalesPoliciesPr
   async function handleAddPolicy(data: NewPolicyData) {
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     await createPolicy(data as any);
-    await fetchAll();
-  }
-
-  async function handleUpdatePolicy(updates: Partial<SalesPolicy>) {
-    if (!detailPolicy) return;
-    const updated = await updatePolicy(detailPolicy.id, updates);
-    setDetailPolicy(updated);
     await fetchAll();
   }
 
@@ -184,7 +175,7 @@ export default function SalesPolicies({ segment, onViewPolicy }: SalesPoliciesPr
             </thead>
             <tbody className="divide-y divide-gray-100">
               {paginated.map((policy) => (
-                <tr key={policy.id} className="hover:bg-gray-50 cursor-pointer transition-colors" onClick={() => setDetailPolicy(policy)}>
+                <tr key={policy.id} className="hover:bg-gray-50 cursor-pointer transition-colors" onClick={() => onViewPolicy?.(policy.id)}>
                   <td className="px-4 py-3 font-mono text-xs text-brand-800 font-medium">{policy.policy_number}</td>
                   <td className="px-4 py-3 text-gray-700 text-xs">{clientName(policy.client_id)}</td>
                   <td className="px-4 py-3">
@@ -245,18 +236,6 @@ export default function SalesPolicies({ segment, onViewPolicy }: SalesPoliciesPr
           users={users}
           settings={settings}
           segment={segment}
-        />
-      )}
-
-      {/* Policy detail modal */}
-      {detailPolicy && (
-        <PolicyDetailModal
-          isOpen={!!detailPolicy}
-          onClose={() => setDetailPolicy(null)}
-          policy={detailPolicy}
-          clientName={clientName(detailPolicy.client_id)}
-          onEdit={() => { /* edit inline in modal */ }}
-          onUpdatePolicy={handleUpdatePolicy}
         />
       )}
     </div>

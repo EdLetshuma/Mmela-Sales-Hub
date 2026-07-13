@@ -21,6 +21,7 @@ import LeadDetail from "@/components/sales/LeadDetail";
 import SalesClients from "@/components/sales/SalesClients";
 import ClientDetail from "@/components/sales/ClientDetail";
 import SalesPolicies from "@/components/sales/SalesPolicies";
+import PolicyDetail from "@/components/sales/PolicyDetail";
 import SalesRetentions from "@/components/sales/SalesRetentions";
 import SalesAlerts from "@/components/sales/SalesAlerts";
 import AgentPerformance from "@/components/sales/AgentPerformance";
@@ -52,13 +53,9 @@ interface ModuleHomeProps {
 export default function ModuleHome({ module, segment, activePath, onNavigate }: ModuleHomeProps) {
   const { user } = useAuth();
   const [editingFormId, setEditingFormId] = useState<string | null>(null);
-  const [viewingLeadId, setViewingLeadId] = useState<string | null>(null);
-  const [viewingClientId, setViewingClientId] = useState<string | null>(null);
 
-  // Clear detail views when the nav tab changes
+  // Clear in-progress editor state when the nav tab changes
   React.useEffect(() => {
-    setViewingLeadId(null);
-    setViewingClientId(null);
     setEditingFormId(null);
   }, [activePath, module]);
 
@@ -66,15 +63,20 @@ export default function ModuleHome({ module, segment, activePath, onNavigate }: 
 
   // ── SALES ──────────────────────────────────────────────────
   if (module === "sales") {
-    if (viewingLeadId) return <LeadDetail leadId={viewingLeadId} onBack={() => setViewingLeadId(null)} onNavigate={(p) => { setViewingLeadId(null); onNavigate(p); }} />;
-    if (viewingClientId) return <ClientDetail clientId={viewingClientId} onBack={() => setViewingClientId(null)} onNavigate={(p) => { setViewingClientId(null); onNavigate(p); }} />;
+    const leadId = activePath.match(/^\/sales\/leads\/([^/]+)$/)?.[1];
+    const clientId = activePath.match(/^\/sales\/clients\/([^/]+)$/)?.[1];
+    const policyId = activePath.match(/^\/sales\/policies\/([^/]+)$/)?.[1];
+
+    if (leadId) return <LeadDetail leadId={leadId} onBack={() => onNavigate("/sales/leads")} onNavigate={onNavigate} />;
+    if (clientId) return <ClientDetail clientId={clientId} onBack={() => onNavigate("/sales/clients")} onNavigate={onNavigate} />;
+    if (policyId) return <PolicyDetail policyId={policyId} onBack={() => onNavigate("/sales/policies")} />;
     if (activePath === "/sales" || activePath === "/sales/dashboard") return <SalesDashboard segment={segment} onNavigate={onNavigate} />;
-    if (activePath === "/sales/leads" || activePath === "/sales/leads/all" || activePath === "/sales/leads/referrals") return <SalesLeads segment={segment} onNavigate={onNavigate} onViewLead={(id) => setViewingLeadId(id)} />;
-    if (activePath === "/sales/clients") return <SalesClients segment={segment} onViewClient={(id) => setViewingClientId(id)} />;
-    if (activePath === "/sales/policies") return <SalesPolicies segment={segment} />;
-    if (activePath === "/sales/retentions") return <SalesRetentions segment={segment} onViewClient={(id) => setViewingClientId(id)} />;
+    if (activePath === "/sales/leads" || activePath === "/sales/leads/all" || activePath === "/sales/leads/referrals") return <SalesLeads segment={segment} onNavigate={onNavigate} onViewLead={(id) => onNavigate(`/sales/leads/${id}`)} />;
+    if (activePath === "/sales/clients") return <SalesClients segment={segment} onViewClient={(id) => onNavigate(`/sales/clients/${id}`)} />;
+    if (activePath === "/sales/policies") return <SalesPolicies segment={segment} onViewPolicy={(id) => onNavigate(`/sales/policies/${id}`)} />;
+    if (activePath === "/sales/retentions") return <SalesRetentions segment={segment} onViewClient={(id) => onNavigate(`/sales/clients/${id}`)} />;
     if (activePath === "/sales/analytics") return <SalesAnalytics segment={segment} />;
-    if (activePath === "/sales/alerts") return <SalesAlerts segment={segment} onNavigate={onNavigate} onViewClient={(id) => setViewingClientId(id)} />;
+    if (activePath === "/sales/alerts") return <SalesAlerts segment={segment} onNavigate={onNavigate} onViewClient={(id) => onNavigate(`/sales/clients/${id}`)} />;
     if (activePath === "/sales/agent-performance") return <AgentPerformance segment={segment} />;
     if (activePath === "/sales/settings") return <SalesSettings />;
     return <SalesDashboard segment={segment} onNavigate={onNavigate} />;

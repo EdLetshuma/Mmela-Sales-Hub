@@ -30,12 +30,13 @@ const STATUS_RANK: Record<string, number> = {
 //   - Can always mark Lost before Won
 //   - Won is terminal — a client isn't "lost"; cancel the relevant
 //     policy instead (from the client's Policies list) with a reason
-//   - If Lost, can only re-open to Contacted (re-engage)
+//   - Lost is terminal — re-engaging a lost lead happens through the
+//     recycled-leads pool (Outreach/Campaigns), not by reopening it here
 //   - Cannot go back to Prospect once Quoted or Won
 //   - Cannot go to Won without at least one accepted quote
 function getAllowedTransitions(current: string, hasAcceptedQuote: boolean): string[] {
   if (current === "Won") return [];                // Won is terminal
-  if (current === "Lost") return ["Contacted"];    // Can only re-engage, not restart
+  if (current === "Lost") return [];                // Lost is terminal
   const currentRank = STATUS_RANK[current] ?? 0;
   return STATUSES.filter(s => {
     if (s === current) return false;               // Already this status
@@ -52,6 +53,7 @@ function getStatusTooltip(target: string, current: string, hasAcceptedQuote: boo
   if (target === "Prospect" && STATUS_RANK[current] >= 2) return "Cannot return to Prospect once Quoted";
   if (target === "Contacted" && current === "Won") return "Cannot return to Contacted from Won";
   if (target === "Lost" && current === "Won") return "A client can't be marked Lost — cancel the relevant policy instead";
+  if (current === "Lost") return "Lost is final — re-engage via the recycled leads pool under Outreach";
   return "";
 }
 
@@ -67,6 +69,22 @@ function extractFromNotes(notes: string | undefined, key: string): string | unde
   if (!notes) return undefined;
   const match = notes.match(new RegExp(`${key}:\\s*(.*)`, "i"));
   return match ? match[1].trim() : undefined;
+}
+
+// Import boilerplate that isn't meaningful as a displayed note —
+// section headers and fields already shown elsewhere on the page
+// (e.g. "Title: Mr"). Fields like VIN number or free-text comments
+// are kept since they carry real information.
+const NOTE_BOILERPLATE_LINE = /^-{2,}.*-{2,}$/;
+const NOTE_BOILERPLATE_KEYS = /^(title|id number|date of birth|product interest):\s*/i;
+
+function cleanNotes(notes: string | undefined | null): string {
+  if (!notes) return "";
+  return notes
+    .split("\n")
+    .map((line) => line.trim())
+    .filter((line) => line && !NOTE_BOILERPLATE_LINE.test(line) && !NOTE_BOILERPLATE_KEYS.test(line))
+    .join("\n");
 }
 
 function FieldRow({ label, value }: { label: string; value?: string | null }) {
@@ -265,6 +283,7 @@ export default function LeadDetail({ leadId, onBack, onNavigate }: LeadDetailPro
   const isConverted = !!lead.client_id;
   const canConvert = lead.status === "Won" && !isConverted;
   const schemeDetails = lead.scheme_details as Record<string, string> | null;
+  const displayNotes = cleanNotes(lead.notes);
 
   return (
     <div className="space-y-4">
@@ -295,9 +314,9 @@ export default function LeadDetail({ leadId, onBack, onNavigate }: LeadDetailPro
                 </span>
                 <button
                   className="btn btn-secondary text-xs"
-                  onClick={() => onNavigate(`/sales/clients?id=${lead.client_id}`)}
+                  onClick={() => onNavigate(`/sales/clients/${lead.client_id}`)}
                 >
-                  View client profile →
+                  View client profile
                 </button>
               </>
             )}
@@ -340,7 +359,7 @@ export default function LeadDetail({ leadId, onBack, onNavigate }: LeadDetailPro
             )}
             {lead.status === "Lost" && (
               <span className="text-[10px] px-2 py-0.5 rounded-full font-medium" style={{ background: "#FCEBEB", color: "#791F1F" }}>
-                Lost — can re-engage to Contacted
+                Lost — final status. Recycled leads will be managed under Outreach.
               </span>
             )}
           </div>
@@ -662,6 +681,10 @@ export default function LeadDetail({ leadId, onBack, onNavigate }: LeadDetailPro
               <p className="text-xs text-gray-400">
                 This lead has converted to a client — reassign the client instead from their profile.
               </p>
+            ) : lead.status === "Lost" ? (
+              <p className="text-xs text-gray-400">
+                This lead is Lost and can no longer be reassigned.
+              </p>
             ) : (
               <select
                 className="input-field text-xs"
@@ -679,10 +702,10 @@ export default function LeadDetail({ leadId, onBack, onNavigate }: LeadDetailPro
           </div>
 
           {/* Notes */}
-          {lead.notes && !editing && (
+          {displayNotes && !editing && (
             <div className="card">
               <h2 className="text-sm font-semibold text-gray-900 mb-2">Notes</h2>
-              <p className="text-sm text-gray-700 whitespace-pre-wrap leading-relaxed">{lead.notes}</p>
+              <p className="text-sm text-gray-700 whitespace-pre-wrap leading-relaxed">{displayNotes}</p>
             </div>
           )}
         </div>

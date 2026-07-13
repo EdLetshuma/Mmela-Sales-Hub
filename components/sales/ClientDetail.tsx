@@ -300,7 +300,7 @@ export default function ClientDetail({
                     <tr
                       key={policy.id}
                       className="hover:bg-gray-50 cursor-pointer transition-colors"
-                      onClick={() => onNavigate(`/sales/policies?id=${policy.id}`)}
+                      onClick={() => onNavigate(`/sales/policies/${policy.id}`)}
                     >
                       <td className="px-4 py-3 font-mono text-xs text-brand-800 font-medium">
                         {policy.policy_number}
@@ -329,7 +329,12 @@ export default function ClientDetail({
                         </span>
                       </td>
                       <td className="px-4 py-3 text-right">
-                        <span className="text-xs text-brand-700 font-medium">View →</span>
+                        <button
+                          className="btn btn-secondary text-xs"
+                          onClick={(e) => { e.stopPropagation(); onNavigate(`/sales/policies/${policy.id}`); }}
+                        >
+                          View
+                        </button>
                       </td>
                     </tr>
                   ))}
