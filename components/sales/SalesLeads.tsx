@@ -408,12 +408,10 @@ export default function SalesLeads({
             >
               <option value="">Select agent…</option>
               {users
-                .filter((u) =>
-                  ["Sales Agent", "Team Leader", "Manager"].includes(u.role)
-                )
+                .filter((u) => u.role === "Sales Agent")
                 .map((u) => (
                   <option key={u.id} value={u.id}>
-                    {u.name} — {u.role}
+                    {u.name}
                   </option>
                 ))}
             </select>

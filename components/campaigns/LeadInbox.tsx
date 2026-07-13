@@ -61,7 +61,9 @@ export default function LeadInbox() {
       setLeads(leadData);
       setCampaigns(campaignData);
       setUnits(unitData);
-      setUsers(userData);
+      // Only agents whose job is to work leads directly are assignable —
+      // not Team Leaders, Managers, or Admins who oversee rather than work them.
+      setUsers(userData.filter((u) => ["Sales Agent", "Concierge Agent", "Credit Health Agent"].includes(u.role)));
     } catch (err) {
       console.error("Failed to load leads:", err);
     } finally {

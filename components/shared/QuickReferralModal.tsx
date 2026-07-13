@@ -7,7 +7,7 @@ import { checkDuplicateLeads, checkDuplicateClients, type DuplicateClientMatch }
 import DuplicateLeadWarning, { type DuplicateLead } from "@/components/shared/DuplicateLeadWarning";
 import { X, CheckCircle, UserCheck } from "lucide-react";
 
-const SELF_ASSIGN_ROLES = ["Sales Agent", "Team Leader", "Concierge Agent", "Credit Health Agent"];
+const SELF_ASSIGN_ROLES = ["Sales Agent", "Concierge Agent", "Credit Health Agent"];
 const TITLES = ["Mr", "Mrs", "Miss", "Ms", "Dr", "Prof"];
 const SEGMENTS = ["Individual", "Commercial"];
 const UNITS: Record<string, string> = {

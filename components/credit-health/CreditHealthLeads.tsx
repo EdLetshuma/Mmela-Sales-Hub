@@ -77,7 +77,7 @@ function LeadModal({ lead, onClose, onSave, users }: LeadModalProps) {
     }
   }
 
-  const chUsers = users.filter((u) => ["Credit Health Agent", "Admin", "Manager"].includes(u.role));
+  const chUsers = users.filter((u) => u.role === "Credit Health Agent");
 
   return (
     <div style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.45)", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 50, padding: 16 }} onClick={onClose}>
