@@ -26,7 +26,6 @@ import SalesRetentions from "@/components/sales/SalesRetentions";
 import SalesAlerts from "@/components/sales/SalesAlerts";
 import AgentPerformance from "@/components/sales/AgentPerformance";
 import SalesAnalytics from "@/components/sales/analytics/SalesAnalytics";
-import SalesSettings from "@/components/sales/settings/SalesSettings";
 
 // ── Concierge ─────────────────────────────────────────────────
 import ConciergeDashboard from "@/components/concierge/ConciergeDashboard";
@@ -78,7 +77,6 @@ export default function ModuleHome({ module, segment, activePath, onNavigate }: 
     if (activePath === "/sales/analytics") return <SalesAnalytics segment={segment} />;
     if (activePath === "/sales/alerts") return <SalesAlerts segment={segment} onNavigate={onNavigate} onViewClient={(id) => onNavigate(`/sales/clients/${id}`)} />;
     if (activePath === "/sales/agent-performance") return <AgentPerformance segment={segment} />;
-    if (activePath === "/sales/settings") return <SalesSettings />;
     return <SalesDashboard segment={segment} onNavigate={onNavigate} />;
   }
 

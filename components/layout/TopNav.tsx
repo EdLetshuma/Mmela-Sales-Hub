@@ -8,7 +8,6 @@ import type { MmelaModule, ClientSegment } from "@/types";
 import {
   LogOut, Settings, ChevronDown, User as UserIcon, Bell, LayoutGrid, X,
 } from "lucide-react";
-import SettingsOverlay from "@/components/admin/SettingsOverlay";
 import ProfilePanel from "@/components/admin/ProfilePanel";
 import QuickReferralModal from "@/components/shared/QuickReferralModal";
 
@@ -22,7 +21,7 @@ interface TopNavProps {
   onNavigate: (path: string) => void;
 }
 
-type OverlayType = "settings" | "profile" | null;
+type OverlayType = "profile" | null;
 
 function Overlay({ title, onClose, children }: { title: string; onClose: () => void; children: React.ReactNode }) {
   return (
@@ -234,7 +233,7 @@ export default function TopNav({ segment, onSegmentChange, canToggleSegment, act
                     {isAdmin && (
                       <button
                         className="w-full flex items-center gap-2 px-4 py-2 text-sm text-gray-700 hover:bg-gray-50 transition-colors"
-                        onClick={() => { setOverlay("settings"); setProfileOpen(false); }}
+                        onClick={() => { onNavigate("/admin/settings/users"); setProfileOpen(false); }}
                       >
                         <Settings className="w-4 h-4" />
                         Settings
@@ -306,14 +305,6 @@ export default function TopNav({ segment, onSegmentChange, canToggleSegment, act
           </div>
         )}
       </header>
-
-      {/* Settings overlay — Admin only */}
-      {overlay === "settings" && (
-        <SettingsOverlay
-          isAdmin={isAdmin}
-          onClose={() => setOverlay(null)}
-        />
-      )}
 
       {/* Profile overlay — all users */}
       {overlay === "profile" && (

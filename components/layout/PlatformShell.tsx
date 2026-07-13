@@ -4,6 +4,7 @@ import React, { useState, useEffect, useRef } from "react";
 import { useAuth } from "@/components/providers/AuthProvider";
 import TopNav from "@/components/layout/TopNav";
 import ModuleHome from "@/components/layout/ModuleHome";
+import AdminSettingsPage from "@/components/admin/AdminSettingsPage";
 import { MODULE_CONFIG } from "@/lib/modules";
 import type { ClientSegment, MmelaModule } from "@/types";
 import { UserSpecialization } from "@/types";
@@ -38,6 +39,11 @@ export default function PlatformShell() {
     restoredRef.current = true;
 
     const path = window.location.pathname;
+    if (path.startsWith("/admin/settings")) {
+      setActivePath(path);
+      window.history.replaceState({ path, module: activeModule }, "", path);
+      return;
+    }
     const segId = path.split("/").filter(Boolean)[0];
     const mod = accessibleModules.find((m) => m.id === segId);
 
@@ -71,6 +77,16 @@ export default function PlatformShell() {
   }, [setActiveModule]);
 
   if (!user) return null;
+
+  if (activePath.startsWith("/admin/settings")) {
+    return (
+      <AdminSettingsPage
+        activePath={activePath}
+        onNavigate={navigate}
+        onExit={() => navigate(MODULE_CONFIG[activeModule].defaultPath)}
+      />
+    );
+  }
 
   return (
     <div className="min-h-screen bg-[#F8F9FB]">

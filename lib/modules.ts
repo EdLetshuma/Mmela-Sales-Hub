@@ -23,7 +23,6 @@ export const MODULE_CONFIG: Record<MmelaModule, ModuleConfig> = {
       { label: "Analytics",   href: "/sales/analytics",         permission: Permission.ViewAnalytics },
       { label: "Alerts",      href: "/sales/alerts",            permission: Permission.ViewAlerts },
       { label: "Performance", href: "/sales/agent-performance", permission: Permission.ViewAgentPerformance },
-      { label: "Catalog",     href: "/sales/settings",          permission: Permission.AccessAdminPanel },
     ],
   },
 
