@@ -673,6 +673,55 @@ export async function getMyDashboardStats(
 }
 
 // ============================================================
+// POLICY ADMIN OVERVIEW — for roles without lead access (e.g.
+// Policy Admin) whose job is clients/policies/retentions, not leads
+// ============================================================
+
+export interface PolicyAdminOverview {
+  totalClients: number;
+  activePolicies: number;
+  totalMonthlyPremium: number;
+  pendingDocs: number;
+  retentionsCount: number;
+  policyStatus: { active: number; pending: number; canceled: number; expired: number; retained: number };
+  recentClients: { id: string; name: string; segment: string | null; join_date: string | null }[];
+}
+
+export async function getPolicyAdminOverview(segment?: ClientSegment): Promise<PolicyAdminOverview> {
+  let clientsQuery = supabase.from("clients").select("id, name, segment, join_date").order("join_date", { ascending: false });
+  let policiesQuery = supabase.from("policies").select("id, status, premium, client_segment, documentation_status");
+
+  if (segment) {
+    clientsQuery = clientsQuery.eq("segment", segment);
+    policiesQuery = policiesQuery.eq("client_segment", segment);
+  }
+
+  const [clientsRes, policiesRes] = await Promise.all([clientsQuery, policiesQuery]);
+  if (clientsRes.error) throw clientsRes.error;
+  if (policiesRes.error) throw policiesRes.error;
+
+  const clients = clientsRes.data ?? [];
+  const policies = policiesRes.data ?? [];
+  const activePolicies = policies.filter((p) => p.status === "Active");
+
+  return {
+    totalClients: clients.length,
+    activePolicies: activePolicies.length,
+    totalMonthlyPremium: activePolicies.reduce((s, p) => s + (Number(p.premium) || 0), 0),
+    pendingDocs: activePolicies.filter((p) => p.documentation_status !== "Complete").length,
+    retentionsCount: policies.filter((p) => p.status === "Canceled" || p.status === "Expired").length,
+    policyStatus: {
+      active: activePolicies.length,
+      pending: policies.filter((p) => p.status === "Pending").length,
+      canceled: policies.filter((p) => p.status === "Canceled").length,
+      expired: policies.filter((p) => p.status === "Expired").length,
+      retained: policies.filter((p) => p.status === "Retained").length,
+    },
+    recentClients: clients.slice(0, 6).map((c) => ({ id: c.id, name: c.name, segment: c.segment, join_date: c.join_date })),
+  };
+}
+
+// ============================================================
 // EXECUTIVE OVERVIEW — cross-business-unit dashboard, gated
 // behind the View Executive Dashboard permission
 // ============================================================

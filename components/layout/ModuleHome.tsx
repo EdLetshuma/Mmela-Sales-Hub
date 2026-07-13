@@ -18,6 +18,7 @@ import CampaignAnalytics from "@/components/campaigns/CampaignAnalytics";
 // ── Sales ─────────────────────────────────────────────────────
 import SalesDashboard from "@/components/sales/SalesDashboard";
 import ExecutiveDashboard from "@/components/sales/ExecutiveDashboard";
+import PolicyAdminDashboard from "@/components/sales/PolicyAdminDashboard";
 import SalesLeads from "@/components/sales/SalesLeads";
 import LeadDetail from "@/components/sales/LeadDetail";
 import SalesClients from "@/components/sales/SalesClients";
@@ -72,7 +73,9 @@ export default function ModuleHome({ module, segment, activePath, onNavigate }: 
     const hasLeadsAccess = (user.permissions ?? []).includes(Permission.ViewLeads);
     const homeDashboard = isExecutive
       ? <ExecutiveDashboard onNavigate={onNavigate} />
-      : <SalesDashboard segment={segment} onNavigate={onNavigate} />;
+      : hasLeadsAccess
+        ? <SalesDashboard segment={segment} onNavigate={onNavigate} />
+        : <PolicyAdminDashboard segment={segment} onNavigate={onNavigate} />;
 
     // Policy Admin (and anyone else without lead access) never sees leads,
     // even via a direct URL — their work is clients/policies/retentions.
