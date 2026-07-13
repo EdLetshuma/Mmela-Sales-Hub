@@ -1,11 +1,13 @@
 "use client";
 
 import React, { useEffect, useState, useCallback } from "react";
-import { getClients, deleteClient, type SalesClient } from "@/lib/sales-api";
+import { getClients, deleteClient, createClient, type SalesClient } from "@/lib/sales-api";
 import { useAuth } from "@/components/providers/AuthProvider";
 import type { ClientSegment } from "@/types";
-import { Search, ChevronRight, Trash2 } from "lucide-react";
+import { Permission } from "@/types";
+import { Search, ChevronRight, Trash2, Plus } from "lucide-react";
 import { SortableTh, sortRows, type SortDir } from "@/components/shared/SortableTh";
+import AddClientModal from "@/components/sales/AddClientModal";
 
 type SortKey = "name" | "id_number" | "segment" | "joined" | "policies";
 
@@ -30,6 +32,7 @@ export default function SalesClients({
 }: SalesClientsProps) {
   const { user } = useAuth();
   const canDelete = user?.role === "Admin" || user?.role === "Manager";
+  const canAdd = (user?.permissions ?? []).includes(Permission.EditClients);
   const [clients, setClients] = useState<SalesClient[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -39,6 +42,7 @@ export default function SalesClients({
   const [page, setPage] = useState(1);
   const [sortKey, setSortKey] = useState<SortKey | null>(null);
   const [sortDir, setSortDir] = useState<SortDir>("asc");
+  const [showAddModal, setShowAddModal] = useState(false);
 
   function handleSort(key: SortKey) {
     if (sortKey === key) {
@@ -58,6 +62,11 @@ export default function SalesClients({
       setClients(prev => prev.filter(c => c.id !== client.id));
     } catch { /* silent */ }
     setDeletingId(null);
+  }
+
+  async function handleAddClient(data: Parameters<typeof createClient>[0]) {
+    await createClient({ ...data, created_by_user_id: user?.id });
+    await fetchClients();
   }
 
   const fetchClients = useCallback(async () => {
@@ -113,7 +122,20 @@ export default function SalesClients({
             {clients.length} client{clients.length !== 1 ? "s" : ""}
           </p>
         </div>
+        {canAdd && (
+          <button className="btn btn-primary text-sm gap-1.5" onClick={() => setShowAddModal(true)}>
+            <Plus className="w-4 h-4" />
+            Add client
+          </button>
+        )}
       </div>
+
+      <AddClientModal
+        isOpen={showAddModal}
+        onClose={() => setShowAddModal(false)}
+        onSave={handleAddClient}
+        segment={segment}
+      />
 
       {/* Filters */}
       <div className="flex flex-wrap gap-2">

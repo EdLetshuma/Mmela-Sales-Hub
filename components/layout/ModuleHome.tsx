@@ -69,15 +69,19 @@ export default function ModuleHome({ module, segment, activePath, onNavigate }: 
     const policyId = activePath.match(/^\/sales\/policies\/([^/]+)$/)?.[1];
 
     const isExecutive = (user.permissions ?? []).includes(Permission.ViewExecutiveDashboard);
+    const hasLeadsAccess = (user.permissions ?? []).includes(Permission.ViewLeads);
+    const homeDashboard = isExecutive
+      ? <ExecutiveDashboard onNavigate={onNavigate} />
+      : <SalesDashboard segment={segment} onNavigate={onNavigate} />;
+
+    // Policy Admin (and anyone else without lead access) never sees leads,
+    // even via a direct URL — their work is clients/policies/retentions.
+    if ((leadId || activePath.startsWith("/sales/leads")) && !hasLeadsAccess) return homeDashboard;
 
     if (leadId) return <LeadDetail leadId={leadId} onBack={() => onNavigate("/sales/leads")} onNavigate={onNavigate} />;
     if (clientId) return <ClientDetail clientId={clientId} onBack={() => onNavigate("/sales/clients")} onNavigate={onNavigate} />;
     if (policyId) return <PolicyDetail policyId={policyId} onBack={() => onNavigate("/sales/policies")} />;
-    if (activePath === "/sales" || activePath === "/sales/dashboard") {
-      return isExecutive
-        ? <ExecutiveDashboard onNavigate={onNavigate} />
-        : <SalesDashboard segment={segment} onNavigate={onNavigate} />;
-    }
+    if (activePath === "/sales" || activePath === "/sales/dashboard") return homeDashboard;
     if (activePath === "/sales/leads" || activePath === "/sales/leads/all" || activePath === "/sales/leads/referrals") return <SalesLeads segment={segment} onNavigate={onNavigate} onViewLead={(id) => onNavigate(`/sales/leads/${id}`)} />;
     if (activePath === "/sales/clients") return <SalesClients segment={segment} onViewClient={(id) => onNavigate(`/sales/clients/${id}`)} />;
     if (activePath === "/sales/policies") return <SalesPolicies segment={segment} onViewPolicy={(id) => onNavigate(`/sales/policies/${id}`)} />;
@@ -85,9 +89,7 @@ export default function ModuleHome({ module, segment, activePath, onNavigate }: 
     if (activePath === "/sales/analytics") return <SalesAnalytics segment={segment} />;
     if (activePath === "/sales/alerts") return <SalesAlerts segment={segment} onNavigate={onNavigate} onViewClient={(id) => onNavigate(`/sales/clients/${id}`)} />;
     if (activePath === "/sales/agent-performance") return <AgentPerformance segment={segment} />;
-    return isExecutive
-      ? <ExecutiveDashboard onNavigate={onNavigate} />
-      : <SalesDashboard segment={segment} onNavigate={onNavigate} />;
+    return homeDashboard;
   }
 
   // ── CAMPAIGNS ──────────────────────────────────────────────

@@ -59,7 +59,11 @@ export default function TopNav({ segment, onSegmentChange, canToggleSegment, act
     onNavigate(MODULE_CONFIG[modId].defaultPath);
   };
 
-  const activeNavItem = currentModule.navItems.find(
+  const visibleNavItems = currentModule.navItems.filter(
+    (item) => !item.permission || (user.permissions ?? []).includes(item.permission)
+  );
+
+  const activeNavItem = visibleNavItems.find(
     (item) => activePath === item.href || item.children?.some((c) => activePath === c.href)
   );
   const activeChildren = activeNavItem?.children;
@@ -219,7 +223,7 @@ export default function TopNav({ segment, onSegmentChange, canToggleSegment, act
         {/* Primary nav */}
         <div className="bg-white border-b border-gray-200">
           <div className="flex items-center h-10 px-5 gap-0">
-            {currentModule.navItems.map((item) => {
+            {visibleNavItems.map((item) => {
               const isActive =
                 activePath === item.href ||
                 item.children?.some((c) => activePath === c.href);

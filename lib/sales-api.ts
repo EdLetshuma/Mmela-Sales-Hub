@@ -944,6 +944,31 @@ export async function getSalesUsers(): Promise<SalesUser[]> {
   return data || [];
 }
 
+export interface NewClientData {
+  name: string;
+  email: string;
+  phone?: string;
+  id_number?: string;
+  address?: string;
+  segment: ClientSegment;
+  title?: string;
+  occupation?: string;
+  created_by_user_id?: string;
+}
+
+// Adds a client directly, bypassing the lead pipeline — for Policy Admins
+// and others who capture a walk-in / existing client without ever having
+// worked them as a lead.
+export async function createClient(client: NewClientData): Promise<SalesClient> {
+  const { data, error } = await supabase
+    .from("clients")
+    .insert({ ...client, join_date: new Date().toISOString().split("T")[0] })
+    .select()
+    .single();
+  if (error) throw error;
+  return data;
+}
+
 export async function deleteClient(id: string): Promise<void> {
   const { error } = await supabase.from("clients").delete().eq("id", id);
   if (error) throw error;
