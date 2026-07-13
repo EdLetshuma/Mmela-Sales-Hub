@@ -65,6 +65,7 @@ export interface User {
   id: string;
   name: string;
   email: string;
+  phone?: string;
   avatar_url?: string;
   permissions: Permission[];
   role: UserRole;

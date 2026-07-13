@@ -219,36 +219,45 @@ export default function CatalogSettings() {
             </div>
           )}
 
-          <div className="card p-0 overflow-hidden">
-            <table className="w-full text-sm border-collapse">
-              <thead>
-                <tr className="bg-gray-50 border-b border-gray-200">
-                  {["Category", "Product", ""].map((h) => (
-                    <th key={h} className="px-4 py-2.5 text-left text-xs font-medium text-gray-500">{h}</th>
-                  ))}
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-gray-100">
-                {products.length === 0 ? (
-                  <tr><td colSpan={3} className="px-4 py-8 text-center text-sm text-gray-400">No products yet.</td></tr>
-                ) : (
-                  products.map((p) => (
-                    <tr key={p.id} className="hover:bg-gray-50">
-                      <td className="px-4 py-3 text-gray-500 text-xs">{p.category_name ?? "—"}</td>
-                      <td className="px-4 py-3 font-medium text-gray-900">{p.name}</td>
-                      <td className="px-4 py-3">
-                        <div className="flex justify-end">
-                          <button className="btn btn-ghost p-1 text-red-400 hover:text-red-600" onClick={() => handleDeleteProduct(p)}>
-                            <Trash2 className="w-3.5 h-3.5" />
-                          </button>
-                        </div>
-                      </td>
-                    </tr>
-                  ))
-                )}
-              </tbody>
-            </table>
-          </div>
+          {categories.length === 0 ? (
+            <div className="card text-center py-8">
+              <p className="text-sm text-gray-400">No categories yet — add one to start building the catalog.</p>
+            </div>
+          ) : (
+            <div className="space-y-3">
+              {categories.map((cat) => {
+                const catProducts = products.filter((p) => p.category_id === cat.id);
+                return (
+                  <div key={cat.id} className="card p-0 overflow-hidden">
+                    <div className="px-4 py-2.5 flex items-center justify-between" style={{ background: "#F8F9FB", borderBottom: "1px solid #E5E7EB" }}>
+                      <p className="text-sm font-semibold text-gray-900">{cat.name}</p>
+                      <span className="text-xs text-gray-400">{catProducts.length} product{catProducts.length !== 1 ? "s" : ""}</span>
+                    </div>
+                    {catProducts.length === 0 ? (
+                      <p className="px-4 py-3 text-sm text-gray-400">No products in this category yet.</p>
+                    ) : (
+                      <table className="w-full text-sm border-collapse">
+                        <tbody className="divide-y divide-gray-100">
+                          {catProducts.map((p) => (
+                            <tr key={p.id} className="hover:bg-gray-50">
+                              <td className="px-4 py-2.5 text-gray-900">{p.name}</td>
+                              <td className="px-4 py-2.5 w-10">
+                                <div className="flex justify-end">
+                                  <button className="btn btn-ghost p-1 text-red-400 hover:text-red-600" onClick={() => handleDeleteProduct(p)}>
+                                    <Trash2 className="w-3.5 h-3.5" />
+                                  </button>
+                                </div>
+                              </td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    )}
+                  </div>
+                );
+              })}
+            </div>
+          )}
         </div>
       )}
     </div>

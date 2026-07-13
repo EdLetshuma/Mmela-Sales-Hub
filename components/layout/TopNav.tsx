@@ -6,9 +6,10 @@ import { MODULE_CONFIG } from "@/lib/modules";
 import { signOut } from "@/lib/auth";
 import type { MmelaModule, ClientSegment } from "@/types";
 import {
-  LogOut, Settings, ChevronDown, User as UserIcon, Bell, LayoutGrid, X,
+  LogOut, Settings, ChevronDown, User as UserIcon, Bell, LayoutGrid,
 } from "lucide-react";
-import ProfilePanel from "@/components/admin/ProfilePanel";
+import ProfileViewModal from "@/components/admin/ProfileViewModal";
+import ProfileEditModal from "@/components/admin/ProfileEditModal";
 import QuickReferralModal from "@/components/shared/QuickReferralModal";
 
 const MODULE_ORDER = ["sales", "campaigns", "concierge", "credit-health", "hub"];
@@ -21,48 +22,7 @@ interface TopNavProps {
   onNavigate: (path: string) => void;
 }
 
-type OverlayType = "profile" | null;
-
-function Overlay({ title, onClose, children }: { title: string; onClose: () => void; children: React.ReactNode }) {
-  return (
-    <div
-      style={{
-        position: "fixed", inset: 0, background: "rgba(0,0,0,0.35)",
-        display: "flex", alignItems: "flex-start", justifyContent: "flex-end",
-        zIndex: 60, paddingTop: 56,
-      }}
-      onClick={onClose}
-    >
-      <div
-        style={{
-          width: "100%", maxWidth: 680, height: "calc(100vh - 56px)",
-          background: "#fff", borderLeft: "1px solid #E5E7EB",
-          display: "flex", flexDirection: "column", overflowY: "auto",
-        }}
-        onClick={(e) => e.stopPropagation()}
-      >
-        <div
-          style={{
-            display: "flex", alignItems: "center", justifyContent: "space-between",
-            padding: "16px 24px", borderBottom: "1px solid #E5E7EB",
-            position: "sticky", top: 0, background: "#fff", zIndex: 1,
-          }}
-        >
-          <p style={{ fontSize: 15, fontWeight: 600, color: "#111827" }}>{title}</p>
-          <button
-            onClick={onClose}
-            style={{ background: "none", border: "none", cursor: "pointer", padding: 4 }}
-          >
-            <X style={{ width: 18, height: 18, color: "#6B7280" }} />
-          </button>
-        </div>
-        <div style={{ padding: "24px", flex: 1 }}>
-          {children}
-        </div>
-      </div>
-    </div>
-  );
-}
+type OverlayType = "profile-view" | "profile-edit" | null;
 
 export default function TopNav({ segment, onSegmentChange, canToggleSegment, activePath, onNavigate }: TopNavProps) {
   const { user, activeModule, setActiveModule, accessibleModules } = useAuth();
@@ -224,7 +184,7 @@ export default function TopNav({ segment, onSegmentChange, canToggleSegment, act
 
                     <button
                       className="w-full flex items-center gap-2 px-4 py-2 text-sm text-gray-700 hover:bg-gray-50 transition-colors"
-                      onClick={() => { setOverlay("profile"); setProfileOpen(false); }}
+                      onClick={() => { setOverlay("profile-view"); setProfileOpen(false); }}
                     >
                       <UserIcon className="w-4 h-4" />
                       Profile
@@ -306,11 +266,15 @@ export default function TopNav({ segment, onSegmentChange, canToggleSegment, act
         )}
       </header>
 
-      {/* Profile overlay — all users */}
-      {overlay === "profile" && (
-        <Overlay title="My profile" onClose={() => setOverlay(null)}>
-          <ProfilePanel />
-        </Overlay>
+      {/* Profile modals — all users */}
+      {overlay === "profile-view" && (
+        <ProfileViewModal
+          onClose={() => setOverlay(null)}
+          onEdit={() => setOverlay("profile-edit")}
+        />
+      )}
+      {overlay === "profile-edit" && (
+        <ProfileEditModal onClose={() => setOverlay(null)} />
       )}
 
       {/* Global referral modal */}

@@ -265,7 +265,55 @@ function RoleMatrix({ isAdmin }: { isAdmin: boolean }) {
   );
 }
 
-// ── Per-user detail: account + password + lead visibility + permission overrides ──
+// ── Segmented tri-state toggle: Default / Granted / Denied ────
+
+type OverrideState = "default" | "granted" | "denied";
+
+function SegmentedToggle({
+  value, onChange, disabled,
+}: { value: OverrideState; onChange: (v: OverrideState) => void; disabled?: boolean }) {
+  const index = value === "default" ? 0 : value === "granted" ? 1 : 2;
+  return (
+    <div
+      style={{
+        position: "relative", display: "flex", width: 84, height: 22,
+        background: "#F1F3F5", borderRadius: 11, padding: 2, flexShrink: 0,
+      }}
+    >
+      <div
+        style={{
+          position: "absolute", top: 2, bottom: 2, left: 2,
+          width: 24, borderRadius: 9,
+          background: index === 1 ? "#0F6E56" : index === 2 ? "#A32D2D" : "#fff",
+          boxShadow: index === 0 ? "0 1px 2px rgba(0,0,0,0.15)" : "none",
+          transform: `translateX(${index * 26}px)`,
+          transition: "transform 0.15s ease, background 0.15s ease",
+        }}
+      />
+      {(["default", "granted", "denied"] as OverrideState[]).map((v) => (
+        <button
+          key={v}
+          type="button"
+          disabled={disabled}
+          onClick={() => onChange(v)}
+          title={v === "default" ? "Role default" : v === "granted" ? "Granted" : "Denied"}
+          style={{
+            position: "relative", zIndex: 1, width: 24, height: 18,
+            display: "flex", alignItems: "center", justifyContent: "center",
+            background: "none", border: "none", cursor: disabled ? "default" : "pointer",
+          }}
+        >
+          {v === "granted" && <Check style={{ width: 11, height: 11, color: index === 1 ? "#fff" : "#9CA3AF" }} />}
+          {v === "denied" && <X style={{ width: 11, height: 11, color: index === 2 ? "#fff" : "#9CA3AF" }} />}
+          {v === "default" && <span style={{ width: 4, height: 4, borderRadius: "50%", background: index === 0 ? "#6B7280" : "#D1D5DB" }} />}
+        </button>
+      ))}
+    </div>
+  );
+}
+
+// ── Per-user detail: account + lead visibility + permission overrides share
+// one draft + Save button; password stays a separate immediate action ──
 
 function UserDetail({
   user, units, isAdmin, overrides, onBack, onSaved, onOverridesChanged,
@@ -285,8 +333,22 @@ function UserDetail({
     status: user.status,
     business_unit_id: user.business_unit_id ?? "",
   });
+  const [leadVisibility, setLeadVisibility] = useState<string>(
+    user.see_all_leads === true ? "true" : user.see_all_leads === false ? "false" : "default"
+  );
+
+  const allPerms = Object.values(PERMISSION_GROUPS).flat();
+  function initialOverrideState(perm: string): OverrideState {
+    const o = overrides.find((ov) => ov.user_id === user.id && ov.permission === perm);
+    return o ? (o.granted ? "granted" : "denied") : "default";
+  }
+  const [permDraft, setPermDraft] = useState<Record<string, OverrideState>>(
+    () => Object.fromEntries(allPerms.map((p) => [p, initialOverrideState(p)]))
+  );
+
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [saved, setSaved] = useState(false);
 
   const [showPwField, setShowPwField] = useState(false);
   const [newPassword, setNewPassword] = useState("");
@@ -294,21 +356,36 @@ function UserDetail({
   const [resetting, setResetting] = useState(false);
   const [pwResult, setPwResult] = useState<{ ok: boolean; msg: string } | null>(null);
 
-  const [savingPerm, setSavingPerm] = useState<string | null>(null);
-  const [leadVisSaving, setLeadVisSaving] = useState(false);
-
-  async function handleSave(e: React.FormEvent) {
-    e.preventDefault();
-    setSaving(true); setError(null);
+  async function handleSaveAll() {
+    setSaving(true); setError(null); setSaved(false);
     try {
-      const { error } = await supabase.from("users").update({
+      const seeAllLeads = leadVisibility === "true" ? true : leadVisibility === "false" ? false : null;
+      const { error: userErr } = await supabase.from("users").update({
         name: form.name,
         role: form.role,
         specialization: form.specialization,
         status: form.status,
         business_unit_id: form.business_unit_id || null,
+        see_all_leads: seeAllLeads,
       }).eq("id", user.id);
-      if (error) throw error;
+      if (userErr) throw userErr;
+
+      const nextOverrides = overrides.filter((o) => o.user_id !== user.id);
+      for (const perm of allPerms) {
+        const draftState = permDraft[perm];
+        if (draftState === "default") continue;
+        nextOverrides.push({ user_id: user.id, permission: perm, granted: draftState === "granted" });
+      }
+
+      await supabase.from("user_permission_overrides").delete().eq("user_id", user.id);
+      const toInsert = nextOverrides.filter((o) => o.user_id === user.id);
+      if (toInsert.length > 0) {
+        await supabase.from("user_permission_overrides").insert(toInsert);
+      }
+      onOverridesChanged(nextOverrides);
+
+      setSaved(true);
+      setTimeout(() => setSaved(false), 3000);
       onSaved();
     } catch (err: unknown) {
       setError(err instanceof Error ? err.message : "Failed to save.");
@@ -351,38 +428,6 @@ function UserDetail({
     } finally { setResetting(false); }
   }
 
-  async function toggleLeadVisibility(val: boolean | null) {
-    if (!isAdmin) return;
-    setLeadVisSaving(true);
-    await supabase.from("users").update({ see_all_leads: val }).eq("id", user.id);
-    setLeadVisSaving(false);
-    onSaved();
-  }
-
-  function getOverride(perm: string) {
-    return overrides.find((o) => o.user_id === user.id && o.permission === perm);
-  }
-
-  async function toggleOverride(perm: string) {
-    if (!isAdmin) return;
-    const key = `${user.id}::${perm}`;
-    setSavingPerm(key);
-    const existing = getOverride(perm);
-    if (existing) {
-      await supabase.from("user_permission_overrides").update({ granted: !existing.granted }).eq("user_id", user.id).eq("permission", perm);
-      onOverridesChanged(overrides.map((o) => (o.user_id === user.id && o.permission === perm ? { ...o, granted: !existing.granted } : o)));
-    } else {
-      await supabase.from("user_permission_overrides").insert({ user_id: user.id, permission: perm, granted: true });
-      onOverridesChanged([...overrides, { user_id: user.id, permission: perm, granted: true }]);
-    }
-    setSavingPerm(null);
-  }
-
-  async function removeOverride(perm: string) {
-    if (!isAdmin) return;
-    await supabase.from("user_permission_overrides").delete().eq("user_id", user.id).eq("permission", perm);
-    onOverridesChanged(overrides.filter((o) => !(o.user_id === user.id && o.permission === perm)));
-  }
 
   return (
     <div className="space-y-4">
@@ -403,11 +448,13 @@ function UserDetail({
         </div>
       </div>
 
+      {error && <div className="p-3 rounded-lg text-xs" style={{ background: "#FCEBEB", color: "#791F1F" }}>{error}</div>}
+      {saved && <div className="p-3 rounded-lg text-xs" style={{ background: "#EAF3DE", color: "#085041" }}>Changes saved.</div>}
+
       {/* Account fields */}
       <div className="card">
         <h2 className="text-sm font-semibold text-gray-900 mb-3">Account</h2>
-        {error && <div className="mb-3 p-3 rounded-lg text-xs" style={{ background: "#FCEBEB", color: "#791F1F" }}>{error}</div>}
-        <form onSubmit={handleSave} className="space-y-3">
+        <div className="space-y-3">
           <div>
             <label className="text-xs text-gray-500 mb-1 block">Full name</label>
             <input className="input-field" value={form.name} onChange={(e) => setForm((f) => ({ ...f, name: e.target.value }))} required disabled={!isAdmin} />
@@ -445,12 +492,7 @@ function UserDetail({
           <div className="text-xs text-gray-400 p-2 rounded" style={{ background: "#F8F9FB" }}>
             {ROLE_DESC[form.role] ?? ""}
           </div>
-          {isAdmin && (
-            <div className="flex justify-end">
-              <button type="submit" className="btn btn-primary" disabled={saving}>{saving ? "Saving…" : "Save changes"}</button>
-            </div>
-          )}
-        </form>
+        </div>
       </div>
 
       {/* Password management */}
@@ -495,27 +537,17 @@ function UserDetail({
       <div className="card space-y-2">
         <p className="text-sm font-semibold text-gray-900">Lead visibility</p>
         <p className="text-xs text-gray-400">Controls whether this user sees all leads or only leads assigned to them.</p>
-        <div className="flex gap-2 mt-2">
-          {[
-            { val: null, label: "Role default", desc: user.role === "Sales Agent" ? "Assigned only" : "All leads" },
-            { val: true, label: "See all leads", desc: "Overrides role" },
-            { val: false, label: "Assigned only", desc: "Overrides role" },
-          ].map(({ val, label, desc }) => {
-            const active = user.see_all_leads === val;
-            return (
-              <button
-                key={String(val)}
-                disabled={!isAdmin || leadVisSaving}
-                onClick={() => toggleLeadVisibility(val)}
-                className="flex-1 p-2.5 rounded-lg text-left transition-all"
-                style={{ background: active ? "#1A348C" : "#F8F9FB", border: `1px solid ${active ? "#1A348C" : "#E5E7EB"}`, cursor: isAdmin ? "pointer" : "default" }}
-              >
-                <p className="text-xs font-semibold" style={{ color: active ? "#fff" : "#374151" }}>{label}</p>
-                <p className="text-[10px]" style={{ color: active ? "#B5D4F4" : "#9CA3AF" }}>{desc}</p>
-              </button>
-            );
-          })}
-        </div>
+        <select
+          className="input-field mt-1"
+          style={{ width: 240 }}
+          value={leadVisibility}
+          onChange={(e) => setLeadVisibility(e.target.value)}
+          disabled={!isAdmin}
+        >
+          <option value="default">Role default ({user.role === "Sales Agent" ? "assigned only" : "all leads"})</option>
+          <option value="true">See all leads</option>
+          <option value="false">Assigned only</option>
+        </select>
       </div>
 
       {/* Permission overrides */}
@@ -526,50 +558,28 @@ function UserDetail({
           <div key={group} className="card">
             <p className="text-[10px] font-bold text-gray-400 uppercase tracking-wider mb-2">{group}</p>
             <div className="space-y-1">
-              {perms.map((perm) => {
-                const override = getOverride(perm);
-                const key = `${user.id}::${perm}`;
-                return (
-                  <div key={perm} className="flex items-center justify-between py-1 px-2 rounded-lg hover:bg-gray-50">
-                    <span className="text-xs text-gray-700">{perm}</span>
-                    <div className="flex items-center gap-2">
-                      {override ? (
-                        <span className="text-[10px] px-1.5 py-0.5 rounded-full font-semibold"
-                          style={override.granted ? { background: "#EAF3DE", color: "#27500A" } : { background: "#FCEBEB", color: "#791F1F" }}>
-                          {override.granted ? "Granted" : "Denied"}
-                        </span>
-                      ) : (
-                        <span className="text-[10px] text-gray-400">Role default</span>
-                      )}
-                      {isAdmin && (
-                        <div className="flex gap-1">
-                          <button
-                            disabled={savingPerm === key}
-                            onClick={() => toggleOverride(perm)}
-                            className="text-[10px] px-2 py-0.5 rounded font-medium transition-all"
-                            style={{ background: "#EEF4FD", color: "#1A348C", border: "1px solid #B5D4F4" }}
-                          >
-                            {override ? "Toggle" : "+ Override"}
-                          </button>
-                          {override && (
-                            <button
-                              onClick={() => removeOverride(perm)}
-                              className="text-[10px] px-2 py-0.5 rounded font-medium"
-                              style={{ background: "#F8F9FB", color: "#9CA3AF", border: "1px solid #E5E7EB" }}
-                            >
-                              Reset
-                            </button>
-                          )}
-                        </div>
-                      )}
-                    </div>
-                  </div>
-                );
-              })}
+              {perms.map((perm) => (
+                <div key={perm} className="flex items-center justify-between py-1.5 px-2 rounded-lg hover:bg-gray-50">
+                  <span className="text-xs text-gray-700">{perm}</span>
+                  <SegmentedToggle
+                    value={permDraft[perm]}
+                    disabled={!isAdmin}
+                    onChange={(v) => setPermDraft((prev) => ({ ...prev, [perm]: v }))}
+                  />
+                </div>
+              ))}
             </div>
           </div>
         ))}
       </div>
+
+      {isAdmin && (
+        <div className="flex justify-end sticky bottom-0 bg-[#F8F9FB] py-3" style={{ borderTop: "1px solid #E5E7EB" }}>
+          <button className="btn btn-primary" disabled={saving} onClick={handleSaveAll}>
+            {saving ? "Saving…" : "Save changes"}
+          </button>
+        </div>
+      )}
     </div>
   );
 }
