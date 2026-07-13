@@ -1,5 +1,12 @@
 import { supabase } from "./supabase";
 import type { ClientSegment } from "@/types";
+import { CONCIERGE_UNIT_ID } from "./concierge-api";
+import { CREDIT_HEALTH_UNIT_ID } from "./credit-health-api";
+
+// The Sales business unit's id — most legacy Sales leads predate business
+// units and have a null business_unit_id, so "is a Sales lead" means
+// "not tagged as Concierge or Credit Health" rather than an exact match.
+export const SALES_UNIT_ID = "75299d6f-408d-4f5c-8e91-63ac5d965866";
 
 // ============================================================
 // SHARED TYPES
@@ -544,7 +551,8 @@ export async function getDashboardStats(
 
   let leadsQuery = supabase
     .from("leads")
-    .select("id, status, assigned_to_user_id, created_at, segment");
+    .select("id, status, assigned_to_user_id, created_at, segment")
+    .or(`business_unit_id.is.null,business_unit_id.eq.${SALES_UNIT_ID}`);
   let policiesQuery = supabase
     .from("policies")
     .select("id, status, premium, client_segment");
@@ -601,6 +609,218 @@ export async function getDashboardStats(
       lost: leads.filter((l) => l.status === "Lost").length,
     },
     unassignedLeads: leads.filter((l) => !l.assigned_to_user_id).length,
+  };
+}
+
+// ============================================================
+// EXECUTIVE OVERVIEW — cross-business-unit dashboard for
+// Admin / Policy Admin / Lead Admin
+// ============================================================
+
+export interface ExecutiveUnitStats {
+  leads: number;
+  clients?: number;
+  activePolicies?: number;
+  monthlyPremium?: number;
+  active?: number;
+  closed?: number;
+  unassigned: number;
+  growthPct: number;
+}
+
+export interface ExecutiveOverview {
+  totals: {
+    totalLeads: number;
+    leadsThisMonth: number;
+    totalClients: number;
+    activePolicies: number;
+    totalMonthlyPremium: number;
+    conversionRate: number;
+    unassignedLeads: number;
+  };
+  pipeline: { prospect: number; contacted: number; quoted: number; won: number; lost: number };
+  units: {
+    personal: ExecutiveUnitStats;
+    commercial: ExecutiveUnitStats;
+    concierge: ExecutiveUnitStats;
+    creditHealth: ExecutiveUnitStats;
+  };
+  monthlyTrend: { month: string; leads: number; converted: number }[];
+  recentLeads: {
+    id: string; name: string; unit: string; source: string | null;
+    status: string; created_at: string;
+  }[];
+  alerts: { id: string; label: string; detail: string; tone: "warning" | "danger" }[];
+  topPerformers: { userId: string; name: string; role: string; closed: number }[];
+}
+
+const MONTH_LABELS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+
+export async function getExecutiveOverview(): Promise<ExecutiveOverview> {
+  const now = new Date();
+  const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1).toISOString();
+  const startOfLastMonth = new Date(now.getFullYear(), now.getMonth() - 1, 1).toISOString();
+
+  const [leadsRes, clientsRes, policiesRes, usersRes] = await Promise.all([
+    supabase.from("leads").select(
+      "id, name, status, segment, source, business_unit_id, assigned_to_user_id, created_at, closed_at, unit_status"
+    ),
+    supabase.from("clients").select("id, segment"),
+    supabase.from("policies").select("id, status, premium, client_segment, documentation_status"),
+    supabase.from("users").select("id, name, role"),
+  ]);
+  if (leadsRes.error) throw leadsRes.error;
+  if (clientsRes.error) throw clientsRes.error;
+  if (policiesRes.error) throw policiesRes.error;
+  if (usersRes.error) throw usersRes.error;
+
+  const allLeads = leadsRes.data ?? [];
+  const allClients = clientsRes.data ?? [];
+  const allPolicies = policiesRes.data ?? [];
+  const users = usersRes.data ?? [];
+
+  const isSales = (bu: string | null) => !bu || bu === SALES_UNIT_ID;
+  const salesLeads = allLeads.filter((l) => isSales(l.business_unit_id));
+  const conciergeLeads = allLeads.filter((l) => l.business_unit_id === CONCIERGE_UNIT_ID);
+  const creditHealthLeads = allLeads.filter((l) => l.business_unit_id === CREDIT_HEALTH_UNIT_ID);
+
+  const leadsThisMonth = salesLeads.filter((l) => l.created_at >= startOfMonth).length;
+  const activePolicies = allPolicies.filter((p) => p.status === "Active");
+  const totalMonthlyPremium = activePolicies.reduce((s, p) => s + (Number(p.premium) || 0), 0);
+  const won = salesLeads.filter((l) => l.status === "Won").length;
+  const conversionRate = salesLeads.length > 0 ? Math.round((won / salesLeads.length) * 1000) / 10 : 0;
+  const unassignedLeads = salesLeads.filter((l) => !l.assigned_to_user_id).length;
+
+  function growth(list: { created_at: string }[]): number {
+    const thisM = list.filter((l) => l.created_at >= startOfMonth).length;
+    const lastM = list.filter((l) => l.created_at >= startOfLastMonth && l.created_at < startOfMonth).length;
+    if (lastM === 0) return thisM > 0 ? 100 : 0;
+    return Math.round(((thisM - lastM) / lastM) * 1000) / 10;
+  }
+
+  const personalLeads = salesLeads.filter((l) => l.segment === "Individual");
+  const commercialLeads = salesLeads.filter((l) => l.segment === "Commercial");
+  const personalActivePolicies = activePolicies.filter((p) => p.client_segment === "Individual");
+  const commercialActivePolicies = activePolicies.filter((p) => p.client_segment === "Commercial");
+
+  const units: ExecutiveOverview["units"] = {
+    personal: {
+      leads: personalLeads.length,
+      clients: allClients.filter((c) => c.segment === "Individual").length,
+      activePolicies: personalActivePolicies.length,
+      monthlyPremium: personalActivePolicies.reduce((s, p) => s + (Number(p.premium) || 0), 0),
+      unassigned: personalLeads.filter((l) => !l.assigned_to_user_id).length,
+      growthPct: growth(personalLeads),
+    },
+    commercial: {
+      leads: commercialLeads.length,
+      clients: allClients.filter((c) => c.segment === "Commercial").length,
+      activePolicies: commercialActivePolicies.length,
+      monthlyPremium: commercialActivePolicies.reduce((s, p) => s + (Number(p.premium) || 0), 0),
+      unassigned: commercialLeads.filter((l) => !l.assigned_to_user_id).length,
+      growthPct: growth(commercialLeads),
+    },
+    concierge: {
+      leads: conciergeLeads.length,
+      active: conciergeLeads.filter((l) => ["Contacted", "Sourcing", "Quote Sent"].includes(l.unit_status ?? "")).length,
+      closed: conciergeLeads.filter((l) => l.unit_status === "Won").length,
+      unassigned: conciergeLeads.filter((l) => !l.assigned_to_user_id).length,
+      growthPct: growth(conciergeLeads),
+    },
+    creditHealth: {
+      leads: creditHealthLeads.length,
+      active: creditHealthLeads.filter((l) => ["Contacted", "Assessment", "Submitted"].includes(l.unit_status ?? "")).length,
+      closed: creditHealthLeads.filter((l) => l.unit_status === "Approved").length,
+      unassigned: creditHealthLeads.filter((l) => !l.assigned_to_user_id).length,
+      growthPct: growth(creditHealthLeads),
+    },
+  };
+
+  // Last 6 months, all units combined
+  const monthlyTrend: ExecutiveOverview["monthlyTrend"] = [];
+  for (let i = 5; i >= 0; i--) {
+    const start = new Date(now.getFullYear(), now.getMonth() - i, 1);
+    const end = new Date(now.getFullYear(), now.getMonth() - i + 1, 1);
+    const inMonth = allLeads.filter((l) => l.created_at >= start.toISOString() && l.created_at < end.toISOString());
+    const convertedInMonth = allLeads.filter(
+      (l) => l.closed_at && l.closed_at >= start.toISOString() && l.closed_at < end.toISOString() &&
+        (l.status === "Won" || l.unit_status === "Won" || l.unit_status === "Approved")
+    );
+    monthlyTrend.push({ month: MONTH_LABELS[start.getMonth()], leads: inMonth.length, converted: convertedInMonth.length });
+  }
+
+  const unitLabel = (bu: string | null, segment: string | null) => {
+    if (bu === CONCIERGE_UNIT_ID) return "Concierge";
+    if (bu === CREDIT_HEALTH_UNIT_ID) return "Credit Health";
+    return segment === "Commercial" ? "Commercial Insurance" : "Personal Insurance";
+  };
+
+  const recentLeads = [...allLeads]
+    .sort((a, b) => (b.created_at ?? "").localeCompare(a.created_at ?? ""))
+    .slice(0, 6)
+    .map((l) => ({
+      id: l.id,
+      name: l.name,
+      unit: unitLabel(l.business_unit_id, l.segment),
+      source: l.source,
+      status: l.unit_status ?? l.status ?? "—",
+      created_at: l.created_at,
+    }));
+
+  const alerts: ExecutiveOverview["alerts"] = [];
+  if (unassignedLeads > 0) {
+    alerts.push({ id: "unassigned-sales", label: `${unassignedLeads} unassigned sales lead${unassignedLeads !== 1 ? "s" : ""}`, detail: "Personal + Commercial Insurance", tone: "warning" });
+  }
+  if (units.concierge.unassigned > 0) {
+    alerts.push({ id: "unassigned-concierge", label: `${units.concierge.unassigned} unassigned Concierge lead${units.concierge.unassigned !== 1 ? "s" : ""}`, detail: "Vehicle sourcing", tone: "warning" });
+  }
+  if (units.creditHealth.unassigned > 0) {
+    alerts.push({ id: "unassigned-credit", label: `${units.creditHealth.unassigned} unassigned Credit Health lead${units.creditHealth.unassigned !== 1 ? "s" : ""}`, detail: "Debt review & advisory", tone: "warning" });
+  }
+  const pendingDocs = activePolicies.filter((p) => p.documentation_status !== "Complete").length;
+  if (pendingDocs > 0) {
+    alerts.push({ id: "pending-docs", label: `${pendingDocs} active polic${pendingDocs !== 1 ? "ies" : "y"} missing documentation`, detail: "Documentation status incomplete", tone: "danger" });
+  }
+
+  const closedThisMonth = allLeads.filter(
+    (l) => l.closed_at && l.closed_at >= startOfMonth &&
+      (l.status === "Won" || l.unit_status === "Won" || l.unit_status === "Approved")
+  );
+  const closedByUser = new Map<string, number>();
+  closedThisMonth.forEach((l) => {
+    if (!l.assigned_to_user_id) return;
+    closedByUser.set(l.assigned_to_user_id, (closedByUser.get(l.assigned_to_user_id) ?? 0) + 1);
+  });
+  const topPerformers = Array.from(closedByUser.entries())
+    .map(([userId, closed]) => {
+      const u = users.find((usr) => usr.id === userId);
+      return { userId, name: u?.name ?? "Unknown", role: u?.role ?? "—", closed };
+    })
+    .sort((a, b) => b.closed - a.closed)
+    .slice(0, 5);
+
+  return {
+    totals: {
+      totalLeads: salesLeads.length,
+      leadsThisMonth,
+      totalClients: allClients.length,
+      activePolicies: activePolicies.length,
+      totalMonthlyPremium,
+      conversionRate,
+      unassignedLeads,
+    },
+    pipeline: {
+      prospect: salesLeads.filter((l) => l.status === "Prospect").length,
+      contacted: salesLeads.filter((l) => l.status === "Contacted").length,
+      quoted: salesLeads.filter((l) => l.status === "Quoted").length,
+      won,
+      lost: salesLeads.filter((l) => l.status === "Lost").length,
+    },
+    units,
+    monthlyTrend,
+    recentLeads,
+    alerts,
+    topPerformers,
   };
 }
 
