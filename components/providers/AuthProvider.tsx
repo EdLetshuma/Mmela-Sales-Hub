@@ -1,11 +1,21 @@
 "use client";
 
-import React, { createContext, useContext, useState, useEffect } from "react";
+import React, { createContext, useContext, useState, useEffect, useRef } from "react";
 import type { User } from "@/types";
 import type { MmelaModule } from "@/types";
 import { getSession, getUserProfile, onAuthStateChange } from "@/lib/auth";
 import { supabase } from "@/lib/supabase";
 import { getAccessibleModules, getDefaultModule } from "@/lib/modules";
+
+// Supabase's own configurable session timeout/time-box is a paid-plan
+// feature. These enforce the same two policies client-side instead:
+// a hard logout after real idle time, and a hard cap on how long a
+// session can live even if it's continuously active.
+const INACTIVITY_LIMIT_MS = 30 * 60 * 1000; // 30 minutes
+const ABSOLUTE_SESSION_LIMIT_MS = 30 * 24 * 60 * 60 * 1000; // 30 days
+const SESSION_STARTED_KEY = "mmela_session_started_at";
+const LOGOUT_REASON_KEY = "mmela_logout_reason";
+const ACTIVITY_EVENTS = ["mousedown", "mousemove", "keydown", "scroll", "touchstart"];
 
 interface AuthContextType {
   user: User | null;
@@ -41,6 +51,13 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [activeModule, setActiveModule] = useState<MmelaModule>("sales");
 
   const accessibleModules = user ? getAccessibleModules(user.role) : [];
+  const lastActivityRef = useRef(Date.now());
+
+  async function autoLogout(reason: "inactivity" | "expired") {
+    sessionStorage.setItem(LOGOUT_REASON_KEY, reason);
+    localStorage.removeItem(SESSION_STARTED_KEY);
+    await supabase.auth.signOut({ scope: "local" });
+  }
 
   const refreshUser = async () => {
     try {
@@ -86,10 +103,16 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     const {
       data: { subscription },
     } = onAuthStateChange(async (event) => {
-      if (event === "SIGNED_IN" || event === "TOKEN_REFRESHED") {
+      if (event === "SIGNED_IN") {
+        if (!localStorage.getItem(SESSION_STARTED_KEY)) {
+          localStorage.setItem(SESSION_STARTED_KEY, String(Date.now()));
+        }
+        await refreshUser();
+      } else if (event === "TOKEN_REFRESHED") {
         await refreshUser();
       } else if (event === "SIGNED_OUT") {
         clearStaleTokens();
+        localStorage.removeItem(SESSION_STARTED_KEY);
         setUser(null);
         setActiveModule("sales");
       }
@@ -97,6 +120,40 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
     return () => subscription.unsubscribe();
   }, []);
+
+  // Inactivity timeout + absolute session cap — both enforced client-side
+  // since Supabase's own session-timeout policy requires a paid plan.
+  useEffect(() => {
+    if (!user) return;
+
+    if (!localStorage.getItem(SESSION_STARTED_KEY)) {
+      localStorage.setItem(SESSION_STARTED_KEY, String(Date.now()));
+    }
+
+    lastActivityRef.current = Date.now();
+
+    function markActivity() {
+      lastActivityRef.current = Date.now();
+    }
+    ACTIVITY_EVENTS.forEach((evt) => window.addEventListener(evt, markActivity, { passive: true }));
+
+    const checkInterval = setInterval(() => {
+      const now = Date.now();
+      if (now - lastActivityRef.current > INACTIVITY_LIMIT_MS) {
+        autoLogout("inactivity");
+        return;
+      }
+      const startedAt = Number(localStorage.getItem(SESSION_STARTED_KEY) ?? now);
+      if (now - startedAt > ABSOLUTE_SESSION_LIMIT_MS) {
+        autoLogout("expired");
+      }
+    }, 30 * 1000);
+
+    return () => {
+      ACTIVITY_EVENTS.forEach((evt) => window.removeEventListener(evt, markActivity));
+      clearInterval(checkInterval);
+    };
+  }, [user]);
 
   return (
     <AuthContext.Provider
