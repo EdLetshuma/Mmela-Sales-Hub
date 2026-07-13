@@ -2,7 +2,7 @@
 
 import React, { useEffect, useState } from "react";
 import { ArrowLeft, ExternalLink } from "lucide-react";
-import { getPolicy, getClient, updatePolicy, type SalesPolicy } from "@/lib/sales-api";
+import { getPolicy, getClient, getSalesUsers, updatePolicy, updateClient, type SalesPolicy } from "@/lib/sales-api";
 import { useAuth } from "@/components/providers/AuthProvider";
 import { Permission } from "@/types";
 import CancelPolicyModal from "@/components/sales/CancelPolicyModal";
@@ -48,7 +48,11 @@ export default function PolicyDetail({ policyId, onBack }: PolicyDetailProps) {
   const canEditPolicyNumber = user?.role === "Admin";
 
   const [policy, setPolicy] = useState<SalesPolicy | null>(null);
+  const [clientId, setClientId] = useState<string | null>(null);
   const [clientName, setClientName] = useState<string>("—");
+  const [clientIdNumber, setClientIdNumber] = useState<string>("");
+  const [idNumberInput, setIdNumberInput] = useState("");
+  const [soldByName, setSoldByName] = useState<string>("—");
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [tab, setTab] = useState<Tab>("details");
@@ -72,7 +76,13 @@ export default function PolicyDetail({ policyId, onBack }: PolicyDetailProps) {
         setLinkValue(p?.document_link ?? "");
         if (p?.client_id) {
           const c = await getClient(p.client_id);
+          setClientId(c?.id ?? null);
           setClientName(c?.name ?? "—");
+          setClientIdNumber(c?.id_number ?? "");
+        }
+        if (p?.sold_by_user_id) {
+          const users = await getSalesUsers();
+          setSoldByName(users.find((u) => u.id === p.sold_by_user_id)?.name ?? "—");
         }
       })
       .catch(() => setError("Failed to load policy."))
@@ -97,9 +107,16 @@ export default function PolicyDetail({ policyId, onBack }: PolicyDetailProps) {
     }
   }
 
+  const needsIdNumber = !clientIdNumber;
+
   async function handleSaveLink() {
+    if (needsIdNumber && !idNumberInput.trim()) return;
     setSavingLink(true);
     try {
+      if (needsIdNumber && clientId) {
+        await updateClient(clientId, { id_number: idNumberInput.trim() });
+        setClientIdNumber(idNumberInput.trim());
+      }
       await applyUpdate({ document_link: linkValue, documentation_status: "Complete" });
       setEditingLink(false);
     } finally {
@@ -303,6 +320,7 @@ export default function PolicyDetail({ policyId, onBack }: PolicyDetailProps) {
                     <DetailRow label="Cancellation date" value={policy.cancellation_date} />
                   )}
                   <DetailRow label="Client segment" value={policy.client_segment} />
+                  <DetailRow label="Sold by" value={soldByName} />
                   <div className="flex gap-4 py-2" style={{ borderBottom: "1px solid #F1F3F5" }}>
                     <span className="text-xs text-gray-400 w-36 flex-shrink-0 mt-0.5">Docs status</span>
                     <span className="badge" style={
@@ -381,6 +399,19 @@ export default function PolicyDetail({ policyId, onBack }: PolicyDetailProps) {
                 <p className="text-xs text-gray-400">
                   {editingLink ? "Edit the link below." : "Add the SharePoint or document URL to mark documentation as complete."}
                 </p>
+                {needsIdNumber && (
+                  <div>
+                    <label className="text-[11px] text-amber-700 font-medium mb-1 block">
+                      Client ID number required before a document link can be captured
+                    </label>
+                    <input
+                      className="input-field text-xs"
+                      value={idNumberInput}
+                      onChange={(e) => setIdNumberInput(e.target.value)}
+                      placeholder="Capture the client's ID number"
+                    />
+                  </div>
+                )}
                 <div className="flex gap-2">
                   <input
                     className="input-field flex-1 text-xs"
@@ -388,7 +419,11 @@ export default function PolicyDetail({ policyId, onBack }: PolicyDetailProps) {
                     onChange={(e) => setLinkValue(e.target.value)}
                     placeholder="Paste SharePoint link here…"
                   />
-                  <button className="btn btn-primary text-xs" disabled={!linkValue || savingLink} onClick={handleSaveLink}>
+                  <button
+                    className="btn btn-primary text-xs"
+                    disabled={!linkValue || savingLink || (needsIdNumber && !idNumberInput.trim())}
+                    onClick={handleSaveLink}
+                  >
                     {savingLink ? "Saving…" : "Save"}
                   </button>
                   {editingLink && (

@@ -236,8 +236,8 @@ function UserDetail({
     status: user.status,
     business_unit_id: user.business_unit_id ?? "",
   });
-  const [leadVisibility, setLeadVisibility] = useState<string>(
-    user.see_all_leads === true ? "true" : user.see_all_leads === false ? "false" : "default"
+  const [seeAllLeads, setSeeAllLeads] = useState<boolean>(
+    user.see_all_leads ?? user.role !== "Sales Agent"
   );
 
   const allPerms = Object.values(PERMISSION_GROUPS).flat();
@@ -265,7 +265,6 @@ function UserDetail({
   async function handleSaveAll() {
     setSaving(true); setError(null); setSaved(false);
     try {
-      const seeAllLeads = leadVisibility === "true" ? true : leadVisibility === "false" ? false : null;
       const { error: userErr } = await supabase.from("users").update({
         name: form.name,
         role: form.role,
@@ -451,17 +450,43 @@ function UserDetail({
                     <span className="text-xs text-gray-700">Lead visibility</span>
                     <p className="text-[10px] text-gray-400">All leads vs. only leads assigned to them</p>
                   </div>
-                  <select
-                    className="input-field"
-                    style={{ width: 180, height: 28, fontSize: 12 }}
-                    value={leadVisibility}
-                    onChange={(e) => setLeadVisibility(e.target.value)}
-                    disabled={!isAdmin}
+                  <div
+                    style={{
+                      position: "relative", display: "flex", width: 148, height: 24,
+                      background: "#F1F3F5", borderRadius: 12, padding: 2, flexShrink: 0,
+                    }}
                   >
-                    <option value="default">Role default ({user.role === "Sales Agent" ? "assigned only" : "all leads"})</option>
-                    <option value="true">See all leads</option>
-                    <option value="false">Assigned only</option>
-                  </select>
+                    <div
+                      style={{
+                        position: "absolute", top: 2, bottom: 2, left: 2,
+                        width: 72, borderRadius: 10,
+                        background: "#fff",
+                        boxShadow: "0 1px 2px rgba(0,0,0,0.08)",
+                        transform: `translateX(${seeAllLeads ? 0 : 72}px)`,
+                        transition: "transform 0.15s ease",
+                      }}
+                    />
+                    {[
+                      { key: true, label: "All leads" },
+                      { key: false, label: "Assigned" },
+                    ].map((opt) => (
+                      <button
+                        key={String(opt.key)}
+                        type="button"
+                        disabled={!isAdmin}
+                        onClick={() => setSeeAllLeads(opt.key)}
+                        style={{
+                          position: "relative", zIndex: 1, width: 72, height: 20,
+                          display: "flex", alignItems: "center", justifyContent: "center",
+                          background: "none", border: "none", cursor: !isAdmin ? "default" : "pointer",
+                          fontSize: 11, fontWeight: 500,
+                          color: seeAllLeads === opt.key ? "#111827" : "#9CA3AF",
+                        }}
+                      >
+                        {opt.label}
+                      </button>
+                    ))}
+                  </div>
                 </div>
               )}
               {perms.map((perm) => (

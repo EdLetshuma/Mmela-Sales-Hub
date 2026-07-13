@@ -7,6 +7,7 @@ import type { SalesClient } from "@/lib/sales-api";
 import type { SalesUser } from "@/lib/sales-api";
 import { useAuth } from "@/components/providers/AuthProvider";
 import { notifyDocsPending } from "@/lib/email-api";
+import { checkDuplicatePolicies, type DuplicatePolicyMatch } from "@/lib/sales-api";
 
 export interface NewPolicyData {
   policy_number: string;
@@ -78,9 +79,15 @@ export default function AddPolicyModal({
 
   const [form, setForm] = useState<NewPolicyData>(emptyForm());
   const [saving, setSaving] = useState(false);
+  const [duplicateMatch, setDuplicateMatch] = useState<DuplicatePolicyMatch | null>(null);
+  const [duplicateConfirmed, setDuplicateConfirmed] = useState(false);
 
   useEffect(() => {
-    if (isOpen) setForm(emptyForm());
+    if (isOpen) {
+      setForm(emptyForm());
+      setDuplicateMatch(null);
+      setDuplicateConfirmed(false);
+    }
   }, [isOpen, defaultClientId, segment]);
 
   const totalPremium = useMemo(
@@ -113,6 +120,10 @@ export default function AddPolicyModal({
       }
       return { ...prev, [name]: value };
     });
+    if (name === "policy_number" || name === "client_id") {
+      setDuplicateMatch(null);
+      setDuplicateConfirmed(false);
+    }
   }
 
   function handleVapChange(id: string, field: "name" | "premium" | "underwriter", value: string | number) {
@@ -133,8 +144,19 @@ export default function AddPolicyModal({
     setForm((prev) => ({ ...prev, vaps: prev.vaps.filter((v) => v.id !== id) }));
   }
 
-  async function handleSubmit(e: FormEvent) {
+  async function handleSubmit(e: FormEvent, skipDuplicateCheck = false) {
     e.preventDefault();
+
+    if (!skipDuplicateCheck && !duplicateConfirmed) {
+      const matches = await checkDuplicatePolicies(
+        form.policy_number, form.client_id, form.insurer, form.product_name
+      );
+      if (matches.length > 0) {
+        setDuplicateMatch(matches[0]);
+        return;
+      }
+    }
+
     setSaving(true);
     try {
       await onSave({ ...form, premium: totalPremium });
@@ -307,6 +329,19 @@ export default function AddPolicyModal({
             </div>
           </div>
 
+          {duplicateMatch && (
+            <div className="mt-4 p-3 rounded-lg text-xs" style={{ background: "#FCEBEB", color: "#791F1F" }}>
+              <p className="font-medium">Possible duplicate policy</p>
+              <p className="mt-0.5">
+                {duplicateMatch.policy_number === form.policy_number.trim()
+                  ? <>A policy with number <strong>{duplicateMatch.policy_number}</strong> already exists for {duplicateMatch.client_name ?? "another client"} ({duplicateMatch.status}).</>
+                  : <>{duplicateMatch.client_name ?? "This client"} already has an active {duplicateMatch.insurer} {duplicateMatch.product_name} policy ({duplicateMatch.policy_number}).</>
+                }
+                {" "}Check it isn&apos;t already captured before continuing.
+              </p>
+            </div>
+          )}
+
           {/* Footer */}
           <div className="flex items-center justify-between mt-4 pt-4" style={{ borderTop: "1px solid #E5E7EB" }}>
             <div>
@@ -317,9 +352,21 @@ export default function AddPolicyModal({
             </div>
             <div className="flex gap-2">
               <button type="button" className="btn btn-secondary" onClick={onClose}>Cancel</button>
-              <button type="submit" className="btn btn-primary" disabled={saving}>
-                {saving ? "Saving…" : "Add policy"}
-              </button>
+              {duplicateMatch ? (
+                <button
+                  type="button"
+                  className="btn btn-primary"
+                  disabled={saving}
+                  style={{ background: "#854F0B", borderColor: "#854F0B" }}
+                  onClick={(e) => { setDuplicateConfirmed(true); handleSubmit(e as unknown as FormEvent, true); }}
+                >
+                  {saving ? "Saving…" : "Save anyway"}
+                </button>
+              ) : (
+                <button type="submit" className="btn btn-primary" disabled={saving}>
+                  {saving ? "Saving…" : "Add policy"}
+                </button>
+              )}
             </div>
           </div>
         </form>

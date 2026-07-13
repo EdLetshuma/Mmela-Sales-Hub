@@ -3,9 +3,9 @@
 import React, { useState } from "react";
 import { supabase } from "@/lib/supabase";
 import { useAuth } from "@/components/providers/AuthProvider";
-import { checkDuplicateLeads } from "@/lib/sales-api";
+import { checkDuplicateLeads, checkDuplicateClients, type DuplicateClientMatch } from "@/lib/sales-api";
 import DuplicateLeadWarning, { type DuplicateLead } from "@/components/shared/DuplicateLeadWarning";
-import { X, CheckCircle } from "lucide-react";
+import { X, CheckCircle, UserCheck } from "lucide-react";
 
 const SELF_ASSIGN_ROLES = ["Sales Agent", "Team Leader", "Concierge Agent", "Credit Health Agent"];
 const TITLES = ["Mr", "Mrs", "Miss", "Ms", "Dr", "Prof"];
@@ -45,6 +45,8 @@ export default function QuickReferralModal({ onClose }: Props) {
   const [error, setError] = useState<string | null>(null);
   const [duplicates, setDuplicates] = useState<DuplicateLead[]>([]);
   const [pendingSave, setPendingSave] = useState(false);
+  const [clientMatch, setClientMatch] = useState<DuplicateClientMatch | null>(null);
+  const [pendingClientConfirm, setPendingClientConfirm] = useState(false);
 
   function set(key: string, val: string) {
     setForm(prev => ({ ...prev, [key]: val }));
@@ -54,21 +56,34 @@ export default function QuickReferralModal({ onClose }: Props) {
     e.preventDefault();
     if (!form.name.trim()) { setError("Name is required."); return; }
 
-    // Check for duplicates before saving
+    // Check for duplicates before saving: an open lead is a true duplicate to
+    // review, while a match against an existing client just means this
+    // referral should be linked to that client, not treated as an error.
     const rawPhone = form.phone.trim() || null;
     const rawEmail = form.email.trim() || null;
-    const dupes = await checkDuplicateLeads(rawPhone, rawEmail);
+    const [dupes, clientDupes] = await Promise.all([
+      checkDuplicateLeads(rawPhone, rawEmail),
+      checkDuplicateClients(rawPhone, rawEmail),
+    ]);
+    const match = clientDupes[0] ?? null;
+    if (match) setClientMatch(match);
+
     if (dupes.length > 0) {
       setDuplicates(dupes);
       setPendingSave(true);
       return;
     }
+    if (match && !pendingClientConfirm) {
+      setPendingClientConfirm(true);
+      return;
+    }
 
-    await doSave();
+    await doSave(match);
   }
 
-  async function doSave() {
+  async function doSave(matchOverride?: DuplicateClientMatch | null) {
     setSaving(true); setError(null);
+    const linkClientId = (matchOverride !== undefined ? matchOverride : clientMatch)?.id ?? null;
     const rawName = form.title ? `${form.title} ${form.name.trim()}` : form.name.trim();
     const { error: dbErr } = await supabase.from("leads").insert({
       name: rawName,
@@ -82,10 +97,11 @@ export default function QuickReferralModal({ onClose }: Props) {
       status: "Prospect",
       business_unit_id: form.business_unit_id || null,
       assigned_to_user_id: isSelfAssign ? (user?.id ?? null) : null,
+      client_id: linkClientId,
     });
     setSaving(false);
     if (dbErr) { setError(dbErr.message); return; }
-    setDuplicates([]); setPendingSave(false);
+    setDuplicates([]); setPendingSave(false); setPendingClientConfirm(false);
     setDone(true);
   }
 
@@ -94,11 +110,38 @@ export default function QuickReferralModal({ onClose }: Props) {
       <DuplicateLeadWarning
         duplicates={duplicates}
         newName={form.title ? `${form.title} ${form.name}` : form.name}
-        onProceed={doSave}
-        onCancel={() => { setDuplicates([]); setPendingSave(false); }}
+        onProceed={() => doSave()}
+        onCancel={() => { setDuplicates([]); setPendingSave(false); setClientMatch(null); }}
         onViewExisting={(id) => { onClose(); window.location.href = `/?lead=${id}`; }}
         saving={saving}
       />
+    );
+  }
+
+  if (pendingClientConfirm && clientMatch) {
+    return (
+      <div style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.5)", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 80, padding: 16 }}>
+        <div className="card" style={{ maxWidth: 460, width: "100%" }}>
+          <div className="flex items-start gap-3 mb-3">
+            <div style={{ width: 36, height: 36, borderRadius: "50%", background: "#EEF4FD", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
+              <UserCheck className="w-4 h-4" style={{ color: "#1A348C" }} />
+            </div>
+            <div>
+              <p className="text-sm font-semibold text-gray-900">Existing client found</p>
+              <p className="text-xs text-gray-500 mt-0.5">
+                <strong>{clientMatch.name}</strong> is already a client. This referral isn&apos;t a duplicate —
+                it&apos;ll be saved as a new lead and linked to their existing client record so it isn&apos;t isolated.
+              </p>
+            </div>
+          </div>
+          <div className="flex gap-2 justify-end">
+            <button className="btn btn-secondary" onClick={() => { setPendingClientConfirm(false); setClientMatch(null); }}>Cancel</button>
+            <button className="btn btn-primary" disabled={saving} onClick={() => doSave()}>
+              {saving ? "Saving…" : "Continue & link"}
+            </button>
+          </div>
+        </div>
+      </div>
     );
   }
 

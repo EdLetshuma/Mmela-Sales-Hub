@@ -154,6 +154,73 @@ export async function checkDuplicateLeads(
   return data ?? [];
 }
 
+export interface DuplicateClientMatch {
+  id: string; name: string; phone: string | null; email: string | null;
+  id_number: string | null; segment: string | null; join_date: string | null;
+}
+
+export async function checkDuplicateClients(
+  phone: string | null | undefined,
+  email: string | null | undefined,
+  idNumber?: string | null,
+  excludeId?: string
+): Promise<DuplicateClientMatch[]> {
+  const cleanPhone = phone?.trim() || null;
+  const cleanEmail = email?.trim().toLowerCase() || null;
+  const cleanIdNumber = idNumber?.trim() || null;
+
+  if (
+    (!cleanPhone || cleanPhone === "n/a") &&
+    (!cleanEmail || cleanEmail.includes("@placeholder.com")) &&
+    !cleanIdNumber
+  ) {
+    return [];
+  }
+
+  const { data, error } = await supabase.rpc("find_duplicate_clients", {
+    p_phone:      cleanPhone,
+    p_email:      cleanEmail?.includes("@placeholder.com") ? null : cleanEmail,
+    p_id_number:  cleanIdNumber,
+    p_exclude_id: excludeId ?? null,
+  });
+
+  if (error) {
+    console.error("Duplicate client check error:", error);
+    return [];
+  }
+  return data ?? [];
+}
+
+export interface DuplicatePolicyMatch {
+  id: string; policy_number: string; client_id: string | null; client_name: string | null;
+  insurer: string | null; product_name: string | null; status: string;
+}
+
+export async function checkDuplicatePolicies(
+  policyNumber: string | null | undefined,
+  clientId?: string | null,
+  insurer?: string | null,
+  productName?: string | null,
+  excludeId?: string
+): Promise<DuplicatePolicyMatch[]> {
+  const cleanNumber = policyNumber?.trim() || null;
+  if (!cleanNumber && !(clientId && insurer && productName)) return [];
+
+  const { data, error } = await supabase.rpc("find_duplicate_policies", {
+    p_policy_number: cleanNumber,
+    p_client_id: clientId ?? null,
+    p_insurer: insurer ?? null,
+    p_product_name: productName ?? null,
+    p_exclude_id: excludeId ?? null,
+  });
+
+  if (error) {
+    console.error("Duplicate policy check error:", error);
+    return [];
+  }
+  return data ?? [];
+}
+
 export async function createLead(
   lead: Omit<SalesLead, "id" | "created_at" | "updated_at">
 ): Promise<SalesLead> {

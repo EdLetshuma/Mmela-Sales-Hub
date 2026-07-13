@@ -1,10 +1,15 @@
 "use client";
 
 import React, { useState, useEffect, ChangeEvent, FormEvent } from "react";
-import { createLead, getSalesUsers } from "@/lib/sales-api";
+import {
+  createLead, getSalesUsers, checkDuplicateLeads, checkDuplicateClients,
+  type DuplicateClientMatch,
+} from "@/lib/sales-api";
 import { notifyNewReferral } from "@/lib/email-api";
 import type { ClientSegment } from "@/types";
 import type { SalesUser } from "@/lib/sales-api";
+import DuplicateLeadWarning, { type DuplicateLead } from "@/components/shared/DuplicateLeadWarning";
+import { UserCheck } from "lucide-react";
 
 const TITLES = ["Mr", "Mrs", "Miss", "Ms", "Dr", "Prof"];
 
@@ -25,6 +30,10 @@ export default function Referrals({ onSuccess }: ReferralsProps) {
   const [saving, setSaving] = useState(false);
   const [done, setDone] = useState(false);
   const [leadAdmins, setLeadAdmins] = useState<SalesUser[]>([]);
+  const [duplicates, setDuplicates] = useState<DuplicateLead[]>([]);
+  const [pendingSave, setPendingSave] = useState(false);
+  const [clientMatch, setClientMatch] = useState<DuplicateClientMatch | null>(null);
+  const [pendingClientConfirm, setPendingClientConfirm] = useState(false);
 
   useEffect(() => {
     getSalesUsers().then((users) =>
@@ -41,7 +50,32 @@ export default function Referrals({ onSuccess }: ReferralsProps) {
 
   async function handleSubmit(e: FormEvent) {
     e.preventDefault();
+
+    const rawPhone = form.phone.trim() || null;
+    const rawEmail = form.email.trim() || null;
+    const [dupes, clientDupes] = await Promise.all([
+      checkDuplicateLeads(rawPhone, rawEmail),
+      checkDuplicateClients(rawPhone, rawEmail),
+    ]);
+    const match = clientDupes[0] ?? null;
+    if (match) setClientMatch(match);
+
+    if (dupes.length > 0) {
+      setDuplicates(dupes);
+      setPendingSave(true);
+      return;
+    }
+    if (match && !pendingClientConfirm) {
+      setPendingClientConfirm(true);
+      return;
+    }
+
+    await doSave(match);
+  }
+
+  async function doSave(matchOverride?: DuplicateClientMatch | null) {
     setSaving(true);
+    const linkClientId = (matchOverride !== undefined ? matchOverride : clientMatch)?.id ?? null;
     try {
       const notes = form.product_interest
         ? `Product Interest: ${form.product_interest}`
@@ -58,6 +92,7 @@ export default function Referrals({ onSuccess }: ReferralsProps) {
         source_type: "referral_portal",
         status: "Prospect",
         notes,
+        client_id: linkClientId ?? undefined,
       });
 
       // Notify Lead Admins
@@ -74,6 +109,7 @@ export default function Referrals({ onSuccess }: ReferralsProps) {
       );
 
       setForm({ title: "", name: "", email: "", phone: "", segment: "Individual", referred_by: "", product_interest: "" });
+      setDuplicates([]); setPendingSave(false); setPendingClientConfirm(false); setClientMatch(null);
       setDone(true);
       setTimeout(() => setDone(false), 3000);
       onSuccess?.();
@@ -82,6 +118,46 @@ export default function Referrals({ onSuccess }: ReferralsProps) {
     } finally {
       setSaving(false);
     }
+  }
+
+  if (pendingSave && duplicates.length > 0) {
+    return (
+      <DuplicateLeadWarning
+        duplicates={duplicates}
+        newName={form.title ? `${form.title} ${form.name}` : form.name}
+        onProceed={() => doSave()}
+        onCancel={() => { setDuplicates([]); setPendingSave(false); setClientMatch(null); }}
+        onViewExisting={(id) => { window.location.href = `/?lead=${id}`; }}
+        saving={saving}
+      />
+    );
+  }
+
+  if (pendingClientConfirm && clientMatch) {
+    return (
+      <div style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.5)", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 80, padding: 16 }}>
+        <div className="card" style={{ maxWidth: 460, width: "100%" }}>
+          <div className="flex items-start gap-3 mb-3">
+            <div style={{ width: 36, height: 36, borderRadius: "50%", background: "#EEF4FD", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
+              <UserCheck className="w-4 h-4" style={{ color: "#1A348C" }} />
+            </div>
+            <div>
+              <p className="text-sm font-semibold text-gray-900">Existing client found</p>
+              <p className="text-xs text-gray-500 mt-0.5">
+                <strong>{clientMatch.name}</strong> is already a client. This referral isn&apos;t a duplicate —
+                it&apos;ll be saved as a new lead and linked to their existing client record so it isn&apos;t isolated.
+              </p>
+            </div>
+          </div>
+          <div className="flex gap-2 justify-end">
+            <button className="btn btn-secondary" onClick={() => { setPendingClientConfirm(false); setClientMatch(null); }}>Cancel</button>
+            <button className="btn btn-primary" disabled={saving} onClick={() => doSave()}>
+              {saving ? "Saving…" : "Continue & link"}
+            </button>
+          </div>
+        </div>
+      </div>
+    );
   }
 
   return (
