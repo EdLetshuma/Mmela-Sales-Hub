@@ -3,6 +3,7 @@
 import React, { useState } from "react";
 import { useAuth } from "@/components/providers/AuthProvider";
 import type { MmelaModule, ClientSegment } from "@/types";
+import { Permission } from "@/types";
 
 // ── Campaigns ────────────────────────────────────────────────
 import CampaignsDashboard from "@/components/campaigns/CampaignsDashboard";
@@ -67,7 +68,7 @@ export default function ModuleHome({ module, segment, activePath, onNavigate }: 
     const clientId = activePath.match(/^\/sales\/clients\/([^/]+)$/)?.[1];
     const policyId = activePath.match(/^\/sales\/policies\/([^/]+)$/)?.[1];
 
-    const isExecutive = ["Admin", "Policy Admin", "Lead Admin"].includes(user.role);
+    const isExecutive = (user.permissions ?? []).includes(Permission.ViewExecutiveDashboard);
 
     if (leadId) return <LeadDetail leadId={leadId} onBack={() => onNavigate("/sales/leads")} onNavigate={onNavigate} />;
     if (clientId) return <ClientDetail clientId={clientId} onBack={() => onNavigate("/sales/clients")} onNavigate={onNavigate} />;

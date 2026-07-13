@@ -612,9 +612,69 @@ export async function getDashboardStats(
   };
 }
 
+// Personal, agent-scoped equivalent of getDashboardStats — only counts
+// this user's own assigned leads / sold policies / created clients, so an
+// agent's dashboard never reveals company-wide volumes they don't hold
+// the View Executive Dashboard permission to see.
+export async function getMyDashboardStats(
+  userId: string,
+  segment?: ClientSegment
+): Promise<SalesDashboardStats> {
+  const now = new Date();
+  const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1).toISOString();
+
+  let leadsQuery = supabase
+    .from("leads")
+    .select("id, status, assigned_to_user_id, created_at, segment")
+    .eq("assigned_to_user_id", userId);
+  let policiesQuery = supabase
+    .from("policies")
+    .select("id, status, premium, client_segment")
+    .eq("sold_by_user_id", userId);
+  let clientsQuery = supabase.from("clients").select("id, segment").eq("created_by_user_id", userId);
+
+  if (segment) {
+    leadsQuery = leadsQuery.eq("segment", segment);
+    policiesQuery = policiesQuery.eq("client_segment", segment);
+    clientsQuery = clientsQuery.eq("segment", segment);
+  }
+
+  const [leadsRes, policiesRes, clientsRes] = await Promise.all([leadsQuery, policiesQuery, clientsQuery]);
+  if (leadsRes.error) throw leadsRes.error;
+  if (policiesRes.error) throw policiesRes.error;
+  if (clientsRes.error) throw clientsRes.error;
+
+  const leads = leadsRes.data || [];
+  const policies = policiesRes.data || [];
+  const clients = clientsRes.data || [];
+
+  const leadsThisMonth = leads.filter((l) => l.created_at && l.created_at >= startOfMonth).length;
+  const activePolicies = policies.filter((p) => p.status === "Active");
+  const totalMonthlyPremium = activePolicies.reduce((sum, p) => sum + (Number(p.premium) || 0), 0);
+  const won = leads.filter((l) => l.status === "Won").length;
+  const conversionRate = leads.length > 0 ? Math.round((won / leads.length) * 1000) / 10 : 0;
+
+  return {
+    totalLeads: leads.length,
+    leadsThisMonth,
+    totalClients: clients.length,
+    activePolicies: activePolicies.length,
+    totalMonthlyPremium,
+    conversionRate,
+    pipeline: {
+      prospect: leads.filter((l) => l.status === "Prospect").length,
+      contacted: leads.filter((l) => l.status === "Contacted").length,
+      quoted: leads.filter((l) => l.status === "Quoted").length,
+      won,
+      lost: leads.filter((l) => l.status === "Lost").length,
+    },
+    unassignedLeads: 0,
+  };
+}
+
 // ============================================================
-// EXECUTIVE OVERVIEW — cross-business-unit dashboard for
-// Admin / Policy Admin / Lead Admin
+// EXECUTIVE OVERVIEW — cross-business-unit dashboard, gated
+// behind the View Executive Dashboard permission
 // ============================================================
 
 export interface ExecutiveUnitStats {

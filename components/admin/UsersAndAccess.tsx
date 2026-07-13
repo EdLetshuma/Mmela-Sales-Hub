@@ -33,8 +33,8 @@ const ROLE_DESC: Record<string, string> = {
 };
 
 const PERMISSION_GROUPS: Record<string, string[]> = {
-  "Dashboard & Analytics": ["View Dashboard", "View Analytics", "View Agent Performance", "View Reporting", "View Campaign Analytics"],
-  "Leads": ["View Leads", "See All Leads", "Manage Lead Pool", "View Lead Import", "View Referrals", "Delete Leads"],
+  "Dashboard & Analytics": ["View Dashboard", "View Executive Dashboard", "View Analytics", "View Agent Performance", "View Reporting", "View Campaign Analytics"],
+  "Leads": ["View Leads", "Manage Lead Pool", "View Lead Import", "View Referrals", "Delete Leads"],
   "Clients": ["View Clients", "Edit Clients", "Delete Clients"],
   "Policies": ["View Policies", "Edit Policies", "Delete Policies", "View Retentions", "View Alerts"],
   "Campaigns": ["Manage Campaigns", "Manage Forms", "Manage Routing"],

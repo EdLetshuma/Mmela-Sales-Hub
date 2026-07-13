@@ -3,7 +3,7 @@
 import React, { useEffect, useState } from "react";
 import { useAuth } from "@/components/providers/AuthProvider";
 import {
-  getDashboardStats,
+  getMyDashboardStats,
   getLeads,
   type SalesDashboardStats,
   type SalesLead,
@@ -69,9 +69,11 @@ export default function SalesDashboard({
     setLoading(true);
     setError(null);
 
+    if (!user?.id) return;
+
     Promise.all([
-      getDashboardStats(segment),
-      getLeads({ segment, assigned: "mine", userId: user?.id }),
+      getMyDashboardStats(user.id, segment),
+      getLeads({ segment, assigned: "mine", userId: user.id }),
     ])
       .then(([statsData, leads]) => {
         setStats(statsData);
@@ -135,19 +137,23 @@ export default function SalesDashboard({
   return (
     <div className="space-y-6">
       {/* Header */}
-      <div>
-        <h1 className="text-xl font-semibold text-gray-900">
-          Welcome back, {firstName}
-        </h1>
-        <p className="text-sm text-gray-500 mt-1">
-          {segment} sales overview
+      <div className="card" style={{ background: "linear-gradient(135deg, #0F1E4D 0%, #1A348C 100%)" }}>
+        <p className="text-xs font-medium mb-2" style={{ color: "rgba(204,224,245,.7)" }}>
+          {new Date().toLocaleDateString("en-ZA", { weekday: "long", day: "numeric", month: "long", year: "numeric" })}
+        </p>
+        <h1 className="text-2xl font-bold text-white">Welcome back, {firstName}.</h1>
+        <p className="text-sm mt-2" style={{ color: "rgba(204,224,245,.85)" }}>
+          {stats
+            ? <>You have <strong className="text-white">{stats.totalLeads} leads</strong> assigned to you
+                {stats.leadsThisMonth > 0 ? <>, <strong className="text-white">{stats.leadsThisMonth}</strong> added this month</> : ""}.</>
+            : `${segment} sales overview`}
         </p>
       </div>
 
       {/* KPI Cards */}
       <div className="grid grid-cols-4 gap-4">
         <div className="card">
-          <p className="text-xs font-medium text-gray-500 mb-1.5">Total leads</p>
+          <p className="text-xs font-medium text-gray-500 mb-1.5">My leads</p>
           <p className="text-2xl font-semibold text-gray-900 tracking-tight">
             {stats?.totalLeads ?? "—"}
           </p>
@@ -159,14 +165,14 @@ export default function SalesDashboard({
         </div>
 
         <div className="card">
-          <p className="text-xs font-medium text-gray-500 mb-1.5">Active clients</p>
+          <p className="text-xs font-medium text-gray-500 mb-1.5">My clients</p>
           <p className="text-2xl font-semibold text-gray-900 tracking-tight">
             {stats?.totalClients ?? "—"}
           </p>
         </div>
 
         <div className="card">
-          <p className="text-xs font-medium text-gray-500 mb-1.5">Active policies</p>
+          <p className="text-xs font-medium text-gray-500 mb-1.5">My active policies</p>
           <p className="text-2xl font-semibold text-gray-900 tracking-tight">
             {stats?.activePolicies ?? "—"}
           </p>
@@ -178,15 +184,11 @@ export default function SalesDashboard({
         </div>
 
         <div className="card">
-          <p className="text-xs font-medium text-gray-500 mb-1.5">Conversion rate</p>
+          <p className="text-xs font-medium text-gray-500 mb-1.5">My conversion rate</p>
           <p className="text-2xl font-semibold text-gray-900 tracking-tight">
             {stats ? `${stats.conversionRate}%` : "—"}
           </p>
-          {stats && stats.unassignedLeads > 0 && (
-            <p className="text-xs mt-1.5 font-medium text-amber-600">
-              {stats.unassignedLeads} unassigned
-            </p>
-          )}
+          <p className="text-xs mt-1.5 text-gray-400">Lead → closed engagement</p>
         </div>
       </div>
 

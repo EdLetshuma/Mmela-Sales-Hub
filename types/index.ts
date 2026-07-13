@@ -30,6 +30,7 @@ export enum UserSpecialization {
 
 export enum Permission {
   ViewDashboard = "View Dashboard",
+  ViewExecutiveDashboard = "View Executive Dashboard",
   ViewLeads = "View Leads",
   ViewReferrals = "View Referrals",
   ViewLeadImport = "View Lead Import",
