@@ -5,6 +5,9 @@ import { getClients, deleteClient, type SalesClient } from "@/lib/sales-api";
 import { useAuth } from "@/components/providers/AuthProvider";
 import type { ClientSegment } from "@/types";
 import { Search, ChevronRight, Trash2 } from "lucide-react";
+import { SortableTh, sortRows, type SortDir } from "@/components/shared/SortableTh";
+
+type SortKey = "name" | "id_number" | "segment" | "joined" | "policies";
 
 interface SalesClientsProps {
   segment: ClientSegment;
@@ -34,6 +37,17 @@ export default function SalesClients({
   const [segmentFilter, setSegmentFilter] = useState<ClientSegment | "">(segment);
   const [deletingId, setDeletingId] = useState<string | null>(null);
   const [page, setPage] = useState(1);
+  const [sortKey, setSortKey] = useState<SortKey | null>(null);
+  const [sortDir, setSortDir] = useState<SortDir>("asc");
+
+  function handleSort(key: SortKey) {
+    if (sortKey === key) {
+      setSortDir((d) => (d === "asc" ? "desc" : "asc"));
+    } else {
+      setSortKey(key);
+      setSortDir("asc");
+    }
+  }
 
   async function handleDelete(e: React.MouseEvent, client: SalesClient) {
     e.stopPropagation();
@@ -69,8 +83,25 @@ export default function SalesClients({
     return () => clearTimeout(t);
   }, [fetchClients]);
 
-  const totalPages = Math.ceil(clients.length / PAGE_SIZE);
-  const paginated = clients.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE);
+  const sorted = sortRows<SalesClient, SortKey>(clients, sortKey, sortDir, (row, key) => {
+    switch (key) {
+      case "name":
+        return row.name?.trim().toLowerCase();
+      case "id_number":
+        return row.id_number ?? "";
+      case "segment":
+        return row.segment ?? "Individual";
+      case "joined":
+        return row.join_date ? new Date(row.join_date).getTime() : null;
+      case "policies":
+        return row.policy_ids?.length ?? 0;
+      default:
+        return "";
+    }
+  });
+
+  const totalPages = Math.ceil(sorted.length / PAGE_SIZE);
+  const paginated = sorted.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE);
 
   return (
     <div className="space-y-4">
@@ -140,11 +171,11 @@ export default function SalesClients({
           <table className="w-full text-sm border-collapse">
             <thead>
               <tr className="bg-gray-50 border-b border-gray-200">
-                <th className="px-4 py-2.5 text-left text-xs font-medium text-gray-500">Name</th>
-                <th className="px-4 py-2.5 text-left text-xs font-medium text-gray-500">ID number</th>
-                <th className="px-4 py-2.5 text-left text-xs font-medium text-gray-500">Segment</th>
-                <th className="px-4 py-2.5 text-left text-xs font-medium text-gray-500">Joined</th>
-                <th className="px-4 py-2.5 text-left text-xs font-medium text-gray-500">Policies</th>
+                <SortableTh label="Name" sortKey="name" activeKey={sortKey} dir={sortDir} onSort={handleSort} />
+                <SortableTh label="ID number" sortKey="id_number" activeKey={sortKey} dir={sortDir} onSort={handleSort} />
+                <SortableTh label="Segment" sortKey="segment" activeKey={sortKey} dir={sortDir} onSort={handleSort} />
+                <SortableTh label="Joined" sortKey="joined" activeKey={sortKey} dir={sortDir} onSort={handleSort} />
+                <SortableTh label="Policies" sortKey="policies" activeKey={sortKey} dir={sortDir} onSort={handleSort} />
                 <th className="px-4 py-2.5" />
               </tr>
             </thead>

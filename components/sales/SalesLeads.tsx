@@ -11,12 +11,15 @@ import {
 } from "@/lib/sales-api";
 import type { ClientSegment } from "@/types";
 import { Search, ChevronRight } from "lucide-react";
+import { SortableTh, sortRows, type SortDir } from "@/components/shared/SortableTh";
 
 interface SalesLeadsProps {
   segment: ClientSegment;
   onNavigate: (path: string) => void;
   onViewLead: (leadId: string) => void;
 }
+
+type SortKey = "name" | "status" | "source" | "assigned_to" | "added";
 
 const STATUSES = ["Prospect", "Contacted", "Quoted", "Won", "Lost"];
 const SOURCES = [
@@ -67,6 +70,13 @@ export default function SalesLeads({
 
   // Pagination
   const [page, setPage] = useState(1);
+  const [sortKey, setSortKey] = useState<SortKey | null>(null);
+  const [sortDir, setSortDir] = useState<SortDir>("asc");
+
+  function handleSort(key: SortKey) {
+    if (sortKey === key) setSortDir((d) => (d === "asc" ? "desc" : "asc"));
+    else { setSortKey(key); setSortDir("asc"); }
+  }
 
   // Assignment modal
   const [assigningLead, setAssigningLead] = useState<SalesLead | null>(null);
@@ -107,8 +117,13 @@ export default function SalesLeads({
     getSalesUsers().then(setUsers).catch(console.error);
   }, []);
 
+  const agentName = (id?: string) => {
+    if (!id) return null;
+    return users.find((u) => u.id === id)?.name ?? null;
+  };
+
   // Client-side search filter
-  const filtered = leads.filter((l) => {
+  const searched = leads.filter((l) => {
     if (!search) return true;
     const q = search.toLowerCase();
     return (
@@ -116,6 +131,15 @@ export default function SalesLeads({
       (!isPlaceholderEmail(l.email) && l.email.toLowerCase().includes(q)) ||
       (l.phone ?? "").toLowerCase().includes(q)
     );
+  });
+  const filtered = sortRows(searched, sortKey, sortDir, (l, key) => {
+    switch (key) {
+      case "name": return l.name;
+      case "status": return l.status ?? "Prospect";
+      case "source": return l.source;
+      case "assigned_to": return agentName(l.assigned_to_user_id ?? undefined);
+      case "added": return l.created_at;
+    }
   });
 
   const totalPages = Math.ceil(filtered.length / PAGE_SIZE);
@@ -135,11 +159,6 @@ export default function SalesLeads({
       setAssignLoading(false);
     }
   }
-
-  const agentName = (id?: string) => {
-    if (!id) return null;
-    return users.find((u) => u.id === id)?.name ?? null;
-  };
 
   return (
     <div className="space-y-4">
@@ -248,11 +267,11 @@ export default function SalesLeads({
           <table className="w-full text-sm border-collapse">
             <thead>
               <tr className="bg-gray-50 border-b border-gray-200">
-                <th className="px-4 py-2.5 text-left text-xs font-medium text-gray-500">Name</th>
-                <th className="px-4 py-2.5 text-left text-xs font-medium text-gray-500">Status</th>
-                <th className="px-4 py-2.5 text-left text-xs font-medium text-gray-500">Source</th>
-                <th className="px-4 py-2.5 text-left text-xs font-medium text-gray-500">Assigned to</th>
-                <th className="px-4 py-2.5 text-left text-xs font-medium text-gray-500">Added</th>
+                <SortableTh label="Name" sortKey="name" activeKey={sortKey} dir={sortDir} onSort={handleSort} />
+                <SortableTh label="Status" sortKey="status" activeKey={sortKey} dir={sortDir} onSort={handleSort} />
+                <SortableTh label="Source" sortKey="source" activeKey={sortKey} dir={sortDir} onSort={handleSort} />
+                <SortableTh label="Assigned to" sortKey="assigned_to" activeKey={sortKey} dir={sortDir} onSort={handleSort} />
+                <SortableTh label="Added" sortKey="added" activeKey={sortKey} dir={sortDir} onSort={handleSort} />
                 <th className="px-4 py-2.5" />
               </tr>
             </thead>

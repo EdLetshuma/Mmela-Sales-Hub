@@ -2,7 +2,7 @@
 
 import React, { useEffect, useState, useCallback } from "react";
 import { supabase } from "@/lib/supabase";
-import { Search, ChevronDown, ChevronUp } from "lucide-react";
+import { Search, ChevronDown, ChevronUp, Download } from "lucide-react";
 
 interface AuditEntry {
   id: string;
@@ -146,6 +146,7 @@ export default function AuditLogPanel() {
   const [expanded, setExpanded] = useState<string | null>(null);
   const [page, setPage] = useState(0);
   const [totalCount, setTotalCount] = useState(0);
+  const [exporting, setExporting] = useState(false);
   const PAGE_SIZE = 50;
 
   const fetchEntries = useCallback(async () => {
@@ -178,6 +179,49 @@ export default function AuditLogPanel() {
       )
     : entries;
 
+  async function handleExport() {
+    setExporting(true);
+    try {
+      let q = supabase
+        .from("audit_log")
+        .select("*")
+        .order("created_at", { ascending: false })
+        .limit(10000);
+
+      if (tableFilter) q = q.eq("table_name", tableFilter);
+      if (actionFilter) q = q.eq("action", actionFilter);
+      if (dateFrom) q = q.gte("created_at", dateFrom);
+      if (dateTo) q = q.lte("created_at", dateTo + "T23:59:59");
+      if (search) q = q.or(`summary.ilike.%${search}%,user_email.ilike.%${search}%`);
+
+      const { data } = await q;
+      const rows = (data as AuditEntry[]) ?? [];
+
+      const headers = ["Date", "Table", "Action", "Summary", "User", "Record ID"];
+      const csvRows = rows.map((e) => [
+        new Date(e.created_at).toISOString(),
+        TABLE_LABELS[e.table_name] ?? e.table_name,
+        ACTION_STYLES[e.action]?.label ?? e.action,
+        (e.summary ?? "").replace(/"/g, '""'),
+        e.user_email ?? "system",
+        e.record_id ?? "",
+      ]);
+      const csv = [headers, ...csvRows]
+        .map((r) => r.map((cell) => `"${String(cell ?? "")}"`).join(","))
+        .join("\n");
+
+      const blob = new Blob([csv], { type: "text/csv" });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = `audit-log-${new Date().toISOString().slice(0, 10)}.csv`;
+      a.click();
+      URL.revokeObjectURL(url);
+    } finally {
+      setExporting(false);
+    }
+  }
+
   return (
     <div className="space-y-4">
       <div>
@@ -209,6 +253,9 @@ export default function AuditLogPanel() {
         {(tableFilter || actionFilter || dateFrom || dateTo || search) && (
           <button className="btn btn-ghost text-xs" onClick={() => { setTableFilter(""); setActionFilter(""); setDateFrom(""); setDateTo(""); setSearch(""); }}>Clear</button>
         )}
+        <button className="btn btn-secondary text-xs gap-1.5" disabled={exporting} onClick={handleExport}>
+          <Download className="w-3.5 h-3.5" /> {exporting ? "Exporting…" : "Export CSV"}
+        </button>
         <span className="text-xs text-gray-400 ml-auto">{totalCount.toLocaleString()} entries</span>
       </div>
 

@@ -142,7 +142,7 @@ function NotificationsSection({ isAdmin }: { isAdmin: boolean }) {
 // ── Security ──────────────────────────────────────────────────
 
 interface SessionRow { id: string; ip_address: string; user_agent: string; signed_in_at: string; refreshed_at: string; }
-interface AllSessionRow { user_id: string; user_name: string; user_email: string; user_role: string; ip_address: string; user_agent: string; signed_in_at: string; refreshed_at: string; }
+interface AllSessionRow { session_id: string; user_id: string; user_name: string; user_email: string; user_role: string; ip_address: string; user_agent: string; signed_in_at: string; refreshed_at: string; }
 
 function parseUA(ua: string): { browser: string; os: string; device: string } {
   if (!ua) return { browser: "Unknown", os: "Unknown", device: "Desktop" };
@@ -152,26 +152,72 @@ function parseUA(ua: string): { browser: string; os: string; device: string } {
   return { browser, os, device };
 }
 
+function DeviceDetailCard({
+  label, ip, ua, signedIn, lastActive, onSignOut, signingOut,
+}: {
+  label: string; ip: string; ua: string; signedIn: string; lastActive?: string;
+  onSignOut?: () => void; signingOut?: boolean;
+}) {
+  const p = parseUA(ua);
+  return (
+    <div className="rounded-xl overflow-hidden" style={{ border: "1px solid #E5E7EB" }}>
+      <div className="px-4 py-3 flex items-center justify-between" style={{ background: "#F8F9FB", borderBottom: "1px solid #E5E7EB" }}>
+        <p className="text-xs font-semibold text-gray-700">{label}</p>
+        {onSignOut && (
+          <button
+            className="btn text-xs text-white"
+            style={{ background: "#A32D2D", padding: "4px 10px" }}
+            disabled={signingOut}
+            onClick={onSignOut}
+          >
+            {signingOut ? "Signing out…" : "Sign out this device"}
+          </button>
+        )}
+      </div>
+      <div className="p-4 grid grid-cols-2 gap-x-8 gap-y-3">
+        {[
+          { label: "IP address", value: ip || "Not available" },
+          { label: "Device type", value: p.device },
+          { label: "Browser", value: p.browser },
+          { label: "Operating system", value: p.os },
+          { label: "Signed in", value: new Date(signedIn).toLocaleString("en-ZA", { day: "numeric", month: "short", year: "numeric", hour: "2-digit", minute: "2-digit" }) },
+          { label: "Last activity", value: lastActive ? new Date(lastActive).toLocaleString("en-ZA", { day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" }) : "—" },
+        ].map(({ label: l, value }) => (
+          <div key={l}>
+            <p className="text-[10px] text-gray-400 font-medium uppercase tracking-wider mb-0.5">{l}</p>
+            <p className="text-sm text-gray-900 font-medium">{value}</p>
+          </div>
+        ))}
+      </div>
+      <div className="px-4 pb-3">
+        <p className="text-[10px] text-gray-400 break-all">{ua}</p>
+      </div>
+    </div>
+  );
+}
+
 function SecuritySection() {
   const { user } = useAuth();
   const isAdmin = user?.role === "Admin";
   const [mySessions, setMySessions] = useState<SessionRow[]>([]);
   const [allSessions, setAllSessions] = useState<AllSessionRow[]>([]);
   const [signingOut, setSigningOut] = useState(false);
+  const [revokingId, setRevokingId] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
+  const [selectedMine, setSelectedMine] = useState<string | null>(null);
+  const [selectedOther, setSelectedOther] = useState<string | null>(null);
 
-  useEffect(() => {
-    async function load() {
-      const { data: mine } = await supabase.rpc("get_my_sessions");
-      setMySessions((mine as SessionRow[]) ?? []);
-      if (isAdmin) {
-        const { data: all } = await supabase.rpc("get_all_sessions_admin");
-        setAllSessions((all as AllSessionRow[]) ?? []);
-      }
-      setLoading(false);
+  const load = useCallback(async () => {
+    const { data: mine } = await supabase.rpc("get_my_sessions");
+    setMySessions((mine as SessionRow[]) ?? []);
+    if (isAdmin) {
+      const { data: all } = await supabase.rpc("get_all_sessions_admin");
+      setAllSessions((all as AllSessionRow[]) ?? []);
     }
-    load();
+    setLoading(false);
   }, [isAdmin]);
+
+  useEffect(() => { load(); }, [load]);
 
   async function handleSignOutAll() {
     if (!window.confirm("Sign out of all sessions? You will be logged out immediately.")) return;
@@ -179,101 +225,127 @@ function SecuritySection() {
     await supabase.auth.signOut({ scope: "global" });
   }
 
-  const currentSession = mySessions[0];
-  const parsed = currentSession ? parseUA(currentSession.user_agent) : null;
+  async function handleRevoke(sessionId: string, isSelf: boolean) {
+    if (!window.confirm(isSelf ? "Sign out this device? You'll need to log in again on it." : "Sign out this device?")) return;
+    setRevokingId(sessionId);
+    try {
+      await supabase.rpc("revoke_session", { target_session_id: sessionId });
+      setSelectedMine((v) => (v === sessionId ? null : v));
+      setSelectedOther((v) => (v === sessionId ? null : v));
+      await load();
+    } finally {
+      setRevokingId(null);
+    }
+  }
+
+  const mineSelected = mySessions.find((s) => s.id === selectedMine);
+  const otherSelected = allSessions.find((s) => s.session_id === selectedOther);
 
   return (
     <div className="space-y-5">
       <div>
         <p className="text-sm font-semibold text-gray-900">Security</p>
-        <p className="text-xs text-gray-400 mt-0.5">Your active sessions and login details</p>
+        <p className="text-xs text-gray-400 mt-0.5">Your active devices and login details</p>
       </div>
 
       {loading ? (
         <div className="h-32 animate-pulse bg-gray-50 rounded-xl" />
-      ) : currentSession ? (
-        <div className="rounded-xl overflow-hidden" style={{ border: "1px solid #E5E7EB" }}>
-          <div className="px-4 py-3" style={{ background: "#F8F9FB", borderBottom: "1px solid #E5E7EB" }}>
-            <div className="flex items-center gap-2">
-              <p className="text-xs font-semibold text-gray-700">Current session</p>
-              <span className="text-[10px] px-2 py-0.5 rounded-full font-semibold" style={{ background: "#EAF3DE", color: "#27500A" }}>Active</span>
-            </div>
-          </div>
-          <div className="p-4 grid grid-cols-2 gap-x-8 gap-y-3">
-            {[
-              { label: "IP address", value: currentSession.ip_address || "Not available" },
-              { label: "Device type", value: parsed?.device ?? "—" },
-              { label: "Browser", value: parsed?.browser ?? "—" },
-              { label: "Operating system", value: parsed?.os ?? "—" },
-              { label: "Signed in", value: new Date(currentSession.signed_in_at).toLocaleString("en-ZA", { day: "numeric", month: "short", year: "numeric", hour: "2-digit", minute: "2-digit" }) },
-              { label: "Last activity", value: currentSession.refreshed_at ? new Date(currentSession.refreshed_at).toLocaleString("en-ZA", { day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" }) : "—" },
-            ].map(({ label, value }) => (
-              <div key={label}>
-                <p className="text-[10px] text-gray-400 font-medium uppercase tracking-wider mb-0.5">{label}</p>
-                <p className="text-sm text-gray-900 font-medium">{value}</p>
-              </div>
-            ))}
-          </div>
-          <div className="px-4 pb-3">
-            <p className="text-[10px] text-gray-400 break-all">{currentSession.user_agent}</p>
-          </div>
-        </div>
-      ) : (
+      ) : mySessions.length === 0 ? (
         <div className="p-4 rounded-xl text-sm text-gray-400" style={{ border: "1px solid #E5E7EB" }}>No session data available.</div>
-      )}
-
-      {mySessions.length > 1 && (
+      ) : (
         <div className="space-y-2">
-          <p className="text-xs font-semibold text-gray-700">Other active sessions ({mySessions.length - 1})</p>
-          {mySessions.slice(1).map((s) => {
-            const p = parseUA(s.user_agent);
-            return (
-              <div key={s.id} className="p-3 rounded-xl flex items-center justify-between" style={{ border: "1px solid #E5E7EB" }}>
-                <div>
-                  <p className="text-xs font-medium text-gray-900">{p.browser} · {p.os} · {p.device}</p>
-                  <p className="text-[10px] text-gray-400 mt-0.5">
-                    {s.ip_address} · Signed in {new Date(s.signed_in_at).toLocaleDateString("en-ZA", { day: "numeric", month: "short", year: "numeric" })}
-                  </p>
-                </div>
-              </div>
-            );
-          })}
+          <p className="text-xs font-semibold text-gray-700">Your devices ({mySessions.length})</p>
+          <div className="grid gap-2" style={{ gridTemplateColumns: mineSelected ? "1fr 1.5fr" : "1fr" }}>
+            <div className="space-y-1.5">
+              {mySessions.map((s, i) => {
+                const p = parseUA(s.user_agent);
+                const active = selectedMine === s.id;
+                return (
+                  <button
+                    key={s.id}
+                    onClick={() => setSelectedMine(active ? null : s.id)}
+                    className="w-full flex items-center justify-between p-3 rounded-xl text-left transition-all"
+                    style={{ background: active ? "#EEF4FD" : "#F8F9FB", border: `1px solid ${active ? "#B5D4F4" : "#E5E7EB"}` }}
+                  >
+                    <div>
+                      <p className="text-xs font-medium text-gray-900">{p.browser} · {p.os} · {p.device}{i === 0 ? " (this device)" : ""}</p>
+                      <p className="text-[10px] text-gray-400 mt-0.5">
+                        {s.ip_address || "—"} · Signed in {new Date(s.signed_in_at).toLocaleDateString("en-ZA", { day: "numeric", month: "short", year: "numeric" })}
+                      </p>
+                    </div>
+                  </button>
+                );
+              })}
+            </div>
+            {mineSelected && (
+              <DeviceDetailCard
+                label="Selected device"
+                ip={mineSelected.ip_address}
+                ua={mineSelected.user_agent}
+                signedIn={mineSelected.signed_in_at}
+                lastActive={mineSelected.refreshed_at}
+                onSignOut={() => handleRevoke(mineSelected.id, true)}
+                signingOut={revokingId === mineSelected.id}
+              />
+            )}
+          </div>
         </div>
       )}
 
-      {isAdmin && allSessions.length > 0 && (
+      {isAdmin && (
         <div className="space-y-2">
           <p className="text-xs font-semibold text-gray-700">All active user sessions ({allSessions.length})</p>
-          <div className="card p-0 overflow-hidden">
-            <div className="table-scroll">
-              <table className="w-full text-xs border-collapse">
-                <thead>
-                  <tr className="bg-gray-50 border-b border-gray-200">
-                    {["User", "Role", "IP address", "Device", "Browser", "OS", "Signed in", "Last active"].map((h) => (
-                      <th key={h} className="px-3 py-2 text-left font-medium text-gray-500 whitespace-nowrap">{h}</th>
-                    ))}
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-gray-100">
-                  {allSessions.map((s, i) => {
-                    const p = parseUA(s.user_agent);
-                    return (
-                      <tr key={i} className="hover:bg-gray-50">
-                        <td className="px-3 py-2 font-medium text-gray-900 whitespace-nowrap">{s.user_name}</td>
-                        <td className="px-3 py-2 text-gray-500">{s.user_role}</td>
-                        <td className="px-3 py-2 font-mono text-gray-700">{s.ip_address || "—"}</td>
-                        <td className="px-3 py-2 text-gray-500">{p.device}</td>
-                        <td className="px-3 py-2 text-gray-500">{p.browser}</td>
-                        <td className="px-3 py-2 text-gray-500">{p.os}</td>
-                        <td className="px-3 py-2 text-gray-400 whitespace-nowrap">{new Date(s.signed_in_at).toLocaleDateString("en-ZA", { day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" })}</td>
-                        <td className="px-3 py-2 text-gray-400 whitespace-nowrap">{s.refreshed_at ? new Date(s.refreshed_at).toLocaleDateString("en-ZA", { day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" }) : "—"}</td>
+          {allSessions.length === 0 ? (
+            <p className="text-sm text-gray-400">No other active sessions.</p>
+          ) : (
+            <div className="grid gap-2" style={{ gridTemplateColumns: otherSelected ? "1fr 1.5fr" : "1fr" }}>
+              <div className="card p-0 overflow-hidden">
+                <div className="table-scroll">
+                  <table className="w-full text-xs border-collapse">
+                    <thead>
+                      <tr className="bg-gray-50 border-b border-gray-200">
+                        {["User", "Role", "IP address", "Device", "Signed in", "Last active"].map((h) => (
+                          <th key={h} className="px-3 py-2 text-left font-medium text-gray-500 whitespace-nowrap">{h}</th>
+                        ))}
                       </tr>
-                    );
-                  })}
-                </tbody>
-              </table>
+                    </thead>
+                    <tbody className="divide-y divide-gray-100">
+                      {allSessions.map((s) => {
+                        const p = parseUA(s.user_agent);
+                        const active = selectedOther === s.session_id;
+                        return (
+                          <tr
+                            key={s.session_id}
+                            className="hover:bg-gray-50 cursor-pointer"
+                            style={active ? { background: "#EEF4FD" } : undefined}
+                            onClick={() => setSelectedOther(active ? null : s.session_id)}
+                          >
+                            <td className="px-3 py-2 font-medium text-gray-900 whitespace-nowrap">{s.user_name}</td>
+                            <td className="px-3 py-2 text-gray-500">{s.user_role}</td>
+                            <td className="px-3 py-2 font-mono text-gray-700">{s.ip_address || "—"}</td>
+                            <td className="px-3 py-2 text-gray-500">{p.device} · {p.browser}</td>
+                            <td className="px-3 py-2 text-gray-400 whitespace-nowrap">{new Date(s.signed_in_at).toLocaleDateString("en-ZA", { day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" })}</td>
+                            <td className="px-3 py-2 text-gray-400 whitespace-nowrap">{s.refreshed_at ? new Date(s.refreshed_at).toLocaleDateString("en-ZA", { day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" }) : "—"}</td>
+                          </tr>
+                        );
+                      })}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+              {otherSelected && (
+                <DeviceDetailCard
+                  label={`${otherSelected.user_name}'s device`}
+                  ip={otherSelected.ip_address}
+                  ua={otherSelected.user_agent}
+                  signedIn={otherSelected.signed_in_at}
+                  lastActive={otherSelected.refreshed_at}
+                  onSignOut={() => handleRevoke(otherSelected.session_id, false)}
+                  signingOut={revokingId === otherSelected.session_id}
+                />
+              )}
             </div>
-          </div>
+          )}
         </div>
       )}
 
