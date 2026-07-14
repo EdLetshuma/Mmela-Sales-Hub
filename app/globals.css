@@ -108,6 +108,14 @@
     color: var(--color-text-muted);
   }
 
+  /* Suppress the browser's own password-reveal control (Edge's ::-ms-reveal,
+     and equivalents) wherever we render our own show/hide eye icon —
+     otherwise the two overlap in the same field. */
+  .input-field[type="password"]::-ms-reveal,
+  .input-field[type="password"]::-ms-clear {
+    display: none;
+  }
+
   .btn {
     display: inline-flex;
     align-items: center;
