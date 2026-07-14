@@ -14,7 +14,6 @@ import { getAccessibleModules, getDefaultModule } from "@/lib/modules";
 const INACTIVITY_LIMIT_MS = 30 * 60 * 1000; // 30 minutes
 const ABSOLUTE_SESSION_LIMIT_MS = 30 * 24 * 60 * 60 * 1000; // 30 days
 const SESSION_STARTED_KEY = "mmela_session_started_at";
-const LOGOUT_REASON_KEY = "mmela_logout_reason";
 const ACTIVITY_EVENTS = ["mousedown", "mousemove", "keydown", "scroll", "touchstart"];
 
 interface AuthContextType {
@@ -53,8 +52,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const accessibleModules = user ? getAccessibleModules(user.role) : [];
   const lastActivityRef = useRef(Date.now());
 
-  async function autoLogout(reason: "inactivity" | "expired") {
-    sessionStorage.setItem(LOGOUT_REASON_KEY, reason);
+  async function autoLogout() {
     localStorage.removeItem(SESSION_STARTED_KEY);
     await supabase.auth.signOut({ scope: "local" });
   }
@@ -140,12 +138,12 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     const checkInterval = setInterval(() => {
       const now = Date.now();
       if (now - lastActivityRef.current > INACTIVITY_LIMIT_MS) {
-        autoLogout("inactivity");
+        autoLogout();
         return;
       }
       const startedAt = Number(localStorage.getItem(SESSION_STARTED_KEY) ?? now);
       if (now - startedAt > ABSOLUTE_SESSION_LIMIT_MS) {
-        autoLogout("expired");
+        autoLogout();
       }
     }, 30 * 1000);
 

@@ -7,12 +7,6 @@ import { Eye, EyeOff, ArrowRight, Mail } from "lucide-react";
 const LOGO_URL =
   "https://tslovjdrcbnewcajawiq.supabase.co/storage/v1/object/public/Logos/MFS%20LOGO%20ROTATED.png";
 
-const LOGOUT_REASON_KEY = "mmela_logout_reason";
-const LOGOUT_MESSAGES: Record<string, string> = {
-  inactivity: "You were signed out after 30 minutes of inactivity.",
-  expired: "Your session expired — please sign in again.",
-};
-
 export default function LoginForm() {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -21,15 +15,6 @@ export default function LoginForm() {
   const [error, setError] = useState<string | null>(null);
   const [showForgotPassword, setShowForgotPassword] = useState(false);
   const [resetSent, setResetSent] = useState(false);
-  const [notice, setNotice] = useState<string | null>(null);
-
-  useEffect(() => {
-    const reason = sessionStorage.getItem(LOGOUT_REASON_KEY);
-    if (reason) {
-      setNotice(LOGOUT_MESSAGES[reason] ?? null);
-      sessionStorage.removeItem(LOGOUT_REASON_KEY);
-    }
-  }, []);
 
   async function handleLogin(e: React.FormEvent) {
     e.preventDefault();
@@ -102,7 +87,6 @@ export default function LoginForm() {
           <h2 className="text-lg font-semibold text-gray-900 mb-1">Welcome back</h2>
           <p className="text-sm text-gray-500 mb-6">Sign in to your account</p>
 
-          {notice && <div className="bg-amber-50 border border-amber-200 text-amber-800 px-4 py-3 rounded-lg text-sm mb-4">{notice}</div>}
           {error && <div className="bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded-lg text-sm mb-4">{error}</div>}
 
           <form onSubmit={handleLogin} className="space-y-4">
