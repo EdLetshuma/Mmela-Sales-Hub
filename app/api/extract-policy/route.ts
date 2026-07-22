@@ -8,6 +8,7 @@
 
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
+import "@/lib/pdf-polyfills";
 import { PDFParse } from "pdf-parse";
 import { extractPolicyDataFromText } from "@/lib/ollama-extract";
 
