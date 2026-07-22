@@ -20,6 +20,47 @@ const EXTRACTION_FIELDS = [
   "policy_number", "insurer", "product_name", "base_premium", "inception_date",
 ] as const;
 
+// Policy documents can run to dozens of pages, and a blind prefix cutoff
+// would lose fields that live past the first page or two (e.g. premium
+// breakdown, VAPs). Instead, keep only the lines near recognisable field
+// labels — cheap to compute, and it keeps the prompt short (fast on a
+// CPU-only model) without throwing away data from later in the document.
+const SECTION_KEYWORDS = [
+  "policy number", "policy no",
+  "insurer", "underwritten by", "underwriter",
+  "product",
+  "premium",
+  "start date", "inception", "period of insurance", "anniversary date",
+  "insured", "policyholder",
+  "id number", "identity number",
+  "email", "e-mail",
+  "cell", "mobile", "telephone", "phone", "contact number",
+];
+
+function extractRelevantSections(text: string, maxLength: number): string {
+  const lines = text.split(/\r?\n/).map((l) => l.trim()).filter(Boolean);
+  const keep = new Set<number>();
+  lines.forEach((line, i) => {
+    const lower = line.toLowerCase();
+    if (SECTION_KEYWORDS.some((kw) => lower.includes(kw))) {
+      // PDF table extraction often separates a label from its value by a
+      // line or two (columns get flattened out of order), so keep a wider
+      // window around each keyword hit rather than just the adjacent line.
+      for (let j = Math.max(0, i - 2); j <= Math.min(lines.length - 1, i + 2); j++) {
+        keep.add(j);
+      }
+    }
+  });
+
+  let excerpt = Array.from(keep).sort((a, b) => a - b).map((i) => lines[i]).join("\n");
+  if (excerpt.length < 200) {
+    // Keyword matching found almost nothing (unusual document layout) —
+    // fall back to just the start of the document rather than sending nothing.
+    excerpt = lines.slice(0, 150).join("\n");
+  }
+  return excerpt.slice(0, maxLength);
+}
+
 function buildPrompt(documentText: string): string {
   return `You extract structured data from South African insurance policy documents.
 Read the document text below and return ONLY a JSON object with these exact keys
@@ -52,7 +93,7 @@ export async function extractPolicyDataFromText(documentText: string): Promise<E
     },
     body: JSON.stringify({
       model: process.env.OLLAMA_MODEL || "qwen2.5:7b",
-      prompt: buildPrompt(documentText.slice(0, 4000)),
+      prompt: buildPrompt(extractRelevantSections(documentText, 5000)),
       format: "json",
       stream: false,
       options: { temperature: 0, num_predict: 300 },
