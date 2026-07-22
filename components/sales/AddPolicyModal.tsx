@@ -1,13 +1,13 @@
 "use client";
 
-import React, { useState, useEffect, useMemo, ChangeEvent, FormEvent } from "react";
-import { Plus, Trash2, X } from "lucide-react";
+import React, { useState, useEffect, useMemo, useRef, ChangeEvent, FormEvent } from "react";
+import { Plus, Trash2, X, FileUp, Loader2 } from "lucide-react";
 import type { SystemSettings } from "@/lib/settings-api";
 import type { SalesClient } from "@/lib/sales-api";
 import type { SalesUser } from "@/lib/sales-api";
 import { useAuth } from "@/components/providers/AuthProvider";
 import { notifyDocsPending } from "@/lib/email-api";
-import { checkDuplicatePolicies, type DuplicatePolicyMatch } from "@/lib/sales-api";
+import { checkDuplicatePolicies, extractPolicyDocument, type DuplicatePolicyMatch } from "@/lib/sales-api";
 
 export interface NewPolicyData {
   policy_number: string;
@@ -81,14 +81,66 @@ export default function AddPolicyModal({
   const [saving, setSaving] = useState(false);
   const [duplicateMatch, setDuplicateMatch] = useState<DuplicatePolicyMatch | null>(null);
   const [duplicateConfirmed, setDuplicateConfirmed] = useState(false);
+  const [extracting, setExtracting] = useState(false);
+  const [extractError, setExtractError] = useState<string | null>(null);
+  const [extractedClientHint, setExtractedClientHint] = useState<string | null>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
     if (isOpen) {
       setForm(emptyForm());
       setDuplicateMatch(null);
       setDuplicateConfirmed(false);
+      setExtractError(null);
+      setExtractedClientHint(null);
     }
   }, [isOpen, defaultClientId, segment]);
+
+  async function handleDocumentUpload(e: ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    setExtracting(true);
+    setExtractError(null);
+    setExtractedClientHint(null);
+    try {
+      const data = await extractPolicyDocument(file);
+      setForm((prev) => {
+        const next = { ...prev };
+        if (data.policy_number) next.policy_number = data.policy_number;
+        if (data.insurer && settings.underwriters.includes(data.insurer)) next.insurer = data.insurer;
+        if (data.base_premium !== undefined) next.base_premium = data.base_premium;
+        if (data.inception_date) next.inception_date = data.inception_date;
+        if (data.product_name) {
+          for (const [cat, names] of Object.entries(settings.productCatalog)) {
+            if (names.includes(data.product_name)) {
+              next.product_category = cat;
+              next.product_name = data.product_name;
+              next.category = CATEGORY_MAP[cat] ?? "General";
+              break;
+            }
+          }
+        }
+        return next;
+      });
+      if (data.client_name) {
+        const match = clients.find((c) => c.name.toLowerCase() === data.client_name!.toLowerCase());
+        if (match) {
+          setForm((prev) => ({ ...prev, client_id: match.id }));
+        } else {
+          setExtractedClientHint(
+            `Document mentions "${data.client_name}" — no matching client found, please select manually.`
+          );
+        }
+      }
+      setDuplicateMatch(null);
+      setDuplicateConfirmed(false);
+    } catch (err) {
+      setExtractError(err instanceof Error ? err.message : "Extraction failed");
+    } finally {
+      setExtracting(false);
+      if (fileInputRef.current) fileInputRef.current.value = "";
+    }
+  }
 
   const totalPremium = useMemo(
     () => (form.base_premium || 0) + form.vaps.reduce((s, v) => s + (v.premium || 0), 0),
@@ -211,6 +263,28 @@ export default function AddPolicyModal({
         <form onSubmit={handleSubmit} style={{ display: "flex", flexDirection: "column", flex: 1, overflow: "hidden" }}>
           <div style={{ overflowY: "auto", flex: 1, paddingRight: 4 }}>
             <div className="space-y-4">
+
+              {/* Auto-fill from document */}
+              <div className="p-3 rounded-lg" style={{ background: "#F3F4F6", border: "1px solid #E5E7EB" }}>
+                <input
+                  ref={fileInputRef}
+                  type="file"
+                  accept="application/pdf"
+                  onChange={handleDocumentUpload}
+                  style={{ display: "none" }}
+                  id="policy-doc-upload"
+                />
+                <label
+                  htmlFor="policy-doc-upload"
+                  className="btn btn-secondary text-xs gap-1.5"
+                  style={{ cursor: extracting ? "wait" : "pointer" }}
+                >
+                  {extracting ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <FileUp className="w-3.5 h-3.5" />}
+                  {extracting ? "Reading document…" : "Auto-fill from policy document (PDF)"}
+                </label>
+                {extractError && <p className="text-xs text-red-600 mt-2">{extractError}</p>}
+                {extractedClientHint && <p className="text-xs text-amber-700 mt-2">{extractedClientHint}</p>}
+              </div>
 
               {/* Client selector — only show if no defaultClientId */}
               {!defaultClientId && (

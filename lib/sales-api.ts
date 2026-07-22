@@ -228,6 +228,40 @@ export async function checkDuplicatePolicies(
   return data ?? [];
 }
 
+export interface ExtractedPolicyDocData {
+  client_name?: string;
+  client_id_number?: string;
+  client_email?: string;
+  client_phone?: string;
+  policy_number?: string;
+  insurer?: string;
+  product_name?: string;
+  base_premium?: number;
+  inception_date?: string;
+}
+
+// Uploads a policy PDF to the server, which extracts its text and asks a
+// self-hosted Ollama model to pull out structured fields for auto-fill.
+export async function extractPolicyDocument(file: File): Promise<ExtractedPolicyDocData> {
+  const {
+    data: { session },
+  } = await supabase.auth.getSession();
+  if (!session) throw new Error("Not authenticated");
+
+  const formData = new FormData();
+  formData.append("file", file);
+
+  const res = await fetch("/api/extract-policy", {
+    method: "POST",
+    headers: { Authorization: `Bearer ${session.access_token}` },
+    body: formData,
+  });
+
+  const body = await res.json();
+  if (!res.ok) throw new Error(body.error || "Extraction failed");
+  return body;
+}
+
 export async function createLead(
   lead: Omit<SalesLead, "id" | "created_at" | "updated_at">
 ): Promise<SalesLead> {
