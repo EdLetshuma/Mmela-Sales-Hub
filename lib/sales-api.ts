@@ -257,6 +257,14 @@ export async function extractPolicyDocument(file: File): Promise<ExtractedPolicy
     body: formData,
   });
 
+  if (!res.headers.get("content-type")?.includes("application/json")) {
+    throw new Error(
+      res.status === 504 || res.status === 502
+        ? "The AI server took too long to respond (timed out). It may be overloaded — try again, or use a smaller/faster model."
+        : `Unexpected server response (HTTP ${res.status}). Check the Ollama server is reachable.`
+    );
+  }
+
   const body = await res.json();
   if (!res.ok) throw new Error(body.error || "Extraction failed");
   return body;

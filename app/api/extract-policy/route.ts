@@ -12,7 +12,7 @@ import { PDFParse } from "pdf-parse";
 import { extractPolicyDataFromText } from "@/lib/ollama-extract";
 
 export const runtime = "nodejs";
-export const maxDuration = 120;
+export const maxDuration = 60;
 
 const SUPABASE_URL = process.env.NEXT_PUBLIC_SUPABASE_URL!;
 const SUPABASE_ANON_KEY = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!;

@@ -52,12 +52,12 @@ export async function extractPolicyDataFromText(documentText: string): Promise<E
     },
     body: JSON.stringify({
       model: process.env.OLLAMA_MODEL || "qwen2.5:7b",
-      prompt: buildPrompt(documentText.slice(0, 12000)),
+      prompt: buildPrompt(documentText.slice(0, 4000)),
       format: "json",
       stream: false,
-      options: { temperature: 0 },
+      options: { temperature: 0, num_predict: 300 },
     }),
-    signal: AbortSignal.timeout(120_000),
+    signal: AbortSignal.timeout(55_000),
   });
 
   if (!res.ok) {
