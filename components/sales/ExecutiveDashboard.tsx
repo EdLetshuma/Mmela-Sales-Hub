@@ -100,12 +100,20 @@ export default function ExecutiveDashboard({ onNavigate }: ExecutiveDashboardPro
       <div className="card" style={{ background: "linear-gradient(135deg, #0F1E4D 0%, #1A348C 100%)" }}>
         <div className="flex items-start justify-between gap-6">
           <div>
-            <p className="text-xs font-medium mb-2" style={{ color: "rgba(204,224,245,.7)" }}>
-              {new Date().toLocaleDateString("en-ZA", { weekday: "long", day: "numeric", month: "long", year: "numeric" })}
-            </p>
+            <div className="flex items-center gap-2.5 mb-2">
+              <span
+                className="text-[10px] font-semibold tracking-wide px-2 py-0.5 rounded"
+                style={{ background: "rgba(204,224,245,.15)", color: "#CCE0F5", letterSpacing: ".06em" }}
+              >
+                EXECUTIVE OVERVIEW
+              </span>
+              <p className="text-xs font-medium" style={{ color: "rgba(204,224,245,.7)" }}>
+                {new Date().toLocaleDateString("en-ZA", { weekday: "long", day: "numeric", month: "long", year: "numeric" })}
+              </p>
+            </div>
             <h1 className="text-2xl font-bold text-white">Welcome back, {firstName}.</h1>
             <p className="text-sm mt-2" style={{ color: "rgba(204,224,245,.85)" }}>
-              You&apos;ve got <strong className="text-white">{totals.leadsThisMonth} new leads</strong> this month across Sales,
+              You&apos;ve got <strong className="text-white">{totals.leadsThisMonth} new leads</strong> this month across the business,
               and <strong className="text-white">{totals.unassignedLeads} waiting</strong> to be assigned. Here&apos;s the state of Mmela right now.
             </p>
           </div>
