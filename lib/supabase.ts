@@ -12,3 +12,20 @@ export const supabase = createClient(supabaseUrl, supabaseAnonKey, {
 });
 
 export const isSupabaseConfigured = true;
+
+// Keep the token-refresh timer paused while the tab isn't visible and
+// resume it (immediately checking whether a refresh is due) when the
+// user comes back — otherwise a long-backgrounded tab can silently sit
+// on an expired access token. Session itself still persists in
+// localStorage regardless, so closing the browser and reopening within
+// the refresh token's validity window resumes the session without a
+// fresh login.
+if (typeof window !== "undefined") {
+  document.addEventListener("visibilitychange", () => {
+    if (document.visibilityState === "visible") {
+      supabase.auth.startAutoRefresh();
+    } else {
+      supabase.auth.stopAutoRefresh();
+    }
+  });
+}

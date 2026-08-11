@@ -63,7 +63,7 @@ export default function DuplicateLeadWarning({
             <div>
               <p className="text-sm font-semibold text-gray-900">Possible duplicate detected</p>
               <p className="text-xs text-gray-500 mt-0.5">
-                A lead matching <strong>{newName}</strong>'s phone or email already exists in the system.
+                A lead matching <strong>{newName}</strong>&apos;s phone or email already exists in the system.
                 Review before saving to avoid duplicate records.
               </p>
             </div>

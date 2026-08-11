@@ -150,7 +150,7 @@ export default function CampaignsDashboard({ onNavigate }: CampaignsDashboardPro
                         {c.name}
                       </p>
                       <p className="text-xs text-gray-400">
-                        {(c as any).business_units?.name || "—"}
+                        {c.business_units?.name || "—"}
                       </p>
                     </div>
                   </div>

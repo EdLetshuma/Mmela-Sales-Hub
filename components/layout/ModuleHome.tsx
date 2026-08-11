@@ -3,6 +3,7 @@
 import React, { useState } from "react";
 import { useAuth } from "@/components/providers/AuthProvider";
 import type { MmelaModule, ClientSegment } from "@/types";
+import { Permission } from "@/types";
 
 // ── Campaigns ────────────────────────────────────────────────
 import CampaignsDashboard from "@/components/campaigns/CampaignsDashboard";
@@ -16,27 +17,31 @@ import CampaignAnalytics from "@/components/campaigns/CampaignAnalytics";
 
 // ── Sales ─────────────────────────────────────────────────────
 import SalesDashboard from "@/components/sales/SalesDashboard";
+import ExecutiveDashboard from "@/components/sales/ExecutiveDashboard";
+import AnalyticsOverview from "@/components/executive/AnalyticsOverview";
+import DivisionPerformance from "@/components/executive/DivisionPerformance";
+import PolicyAdminDashboard from "@/components/sales/PolicyAdminDashboard";
 import SalesLeads from "@/components/sales/SalesLeads";
 import LeadDetail from "@/components/sales/LeadDetail";
 import SalesClients from "@/components/sales/SalesClients";
 import ClientDetail from "@/components/sales/ClientDetail";
 import SalesPolicies from "@/components/sales/SalesPolicies";
+import PolicyDetail from "@/components/sales/PolicyDetail";
 import SalesRetentions from "@/components/sales/SalesRetentions";
 import SalesAlerts from "@/components/sales/SalesAlerts";
 import AgentPerformance from "@/components/sales/AgentPerformance";
-import SalesAnalytics from "@/components/sales/analytics/SalesAnalytics";
-import SalesSettings from "@/components/sales/settings/SalesSettings";
+import SalesAnalyticsHub from "@/components/sales/analytics/SalesAnalyticsHub";
 
 // ── Concierge ─────────────────────────────────────────────────
 import ConciergeDashboard from "@/components/concierge/ConciergeDashboard";
 import ConciergeLeads from "@/components/concierge/ConciergeLeads";
 import ConciergeActivity from "@/components/concierge/ConciergeActivity";
-import ConciergeAnalytics from "@/components/concierge/ConciergeAnalytics";
+import ConciergeAnalyticsHub from "@/components/concierge/ConciergeAnalyticsHub";
 
 // ── Credit Health ─────────────────────────────────────────────
 import CreditHealthDashboard from "@/components/credit-health/CreditHealthDashboard";
 import CreditHealthLeads from "@/components/credit-health/CreditHealthLeads";
-import CreditHealthAnalytics from "@/components/credit-health/CreditHealthAnalytics";
+import CreditHealthAnalyticsHub from "@/components/credit-health/CreditHealthAnalyticsHub";
 
 // ── Reporting (Hub) ───────────────────────────────────────────
 import HubGenerate from "@/components/hub/HubGenerate";
@@ -52,32 +57,49 @@ interface ModuleHomeProps {
 export default function ModuleHome({ module, segment, activePath, onNavigate }: ModuleHomeProps) {
   const { user } = useAuth();
   const [editingFormId, setEditingFormId] = useState<string | null>(null);
-  const [viewingLeadId, setViewingLeadId] = useState<string | null>(null);
-  const [viewingClientId, setViewingClientId] = useState<string | null>(null);
 
-  // Clear detail views when the nav tab changes
+  // Clear in-progress editor state when the nav tab changes
   React.useEffect(() => {
-    setViewingLeadId(null);
-    setViewingClientId(null);
     setEditingFormId(null);
   }, [activePath, module]);
 
   if (!user) return null;
 
+  // ── EXECUTIVE ──────────────────────────────────────────────
+  // Standalone cross-business rollup, not nested under any one module.
+  if (module === "executive") {
+    if (activePath === "/executive/analytics/divisions") return <DivisionPerformance />;
+    if (activePath === "/executive/analytics") return <AnalyticsOverview />;
+    return <ExecutiveDashboard onNavigate={onNavigate} />;
+  }
+
   // ── SALES ──────────────────────────────────────────────────
   if (module === "sales") {
-    if (viewingLeadId) return <LeadDetail leadId={viewingLeadId} onBack={() => setViewingLeadId(null)} onNavigate={(p) => { setViewingLeadId(null); onNavigate(p); }} />;
-    if (viewingClientId) return <ClientDetail clientId={viewingClientId} onBack={() => setViewingClientId(null)} onNavigate={(p) => { setViewingClientId(null); onNavigate(p); }} />;
-    if (activePath === "/sales" || activePath === "/sales/dashboard") return <SalesDashboard segment={segment} onNavigate={onNavigate} />;
-    if (activePath === "/sales/leads" || activePath === "/sales/leads/all" || activePath === "/sales/leads/referrals") return <SalesLeads segment={segment} onNavigate={onNavigate} onViewLead={(id) => setViewingLeadId(id)} />;
-    if (activePath === "/sales/clients") return <SalesClients segment={segment} onViewClient={(id) => setViewingClientId(id)} />;
-    if (activePath === "/sales/policies") return <SalesPolicies segment={segment} />;
-    if (activePath === "/sales/retentions") return <SalesRetentions segment={segment} onViewClient={(id) => setViewingClientId(id)} />;
-    if (activePath === "/sales/analytics") return <SalesAnalytics segment={segment} />;
-    if (activePath === "/sales/alerts") return <SalesAlerts segment={segment} onNavigate={onNavigate} onViewClient={(id) => setViewingClientId(id)} />;
+    const leadId = activePath.match(/^\/sales\/leads\/([^/]+)$/)?.[1];
+    const clientId = activePath.match(/^\/sales\/clients\/([^/]+)$/)?.[1];
+    const policyId = activePath.match(/^\/sales\/policies\/([^/]+)$/)?.[1];
+
+    const hasLeadsAccess = (user.permissions ?? []).includes(Permission.ViewLeads);
+    const homeDashboard = hasLeadsAccess
+      ? <SalesDashboard segment={segment} onNavigate={onNavigate} />
+      : <PolicyAdminDashboard segment={segment} onNavigate={onNavigate} />;
+
+    // Policy Admin (and anyone else without lead access) never sees leads,
+    // even via a direct URL — their work is clients/policies/retentions.
+    if ((leadId || activePath.startsWith("/sales/leads")) && !hasLeadsAccess) return homeDashboard;
+
+    if (leadId) return <LeadDetail leadId={leadId} onBack={() => onNavigate("/sales/leads")} onNavigate={onNavigate} />;
+    if (clientId) return <ClientDetail clientId={clientId} onBack={() => onNavigate("/sales/clients")} onNavigate={onNavigate} />;
+    if (policyId) return <PolicyDetail policyId={policyId} onBack={() => onNavigate("/sales/policies")} />;
+    if (activePath === "/sales" || activePath === "/sales/dashboard") return homeDashboard;
+    if (activePath === "/sales/leads" || activePath === "/sales/leads/all" || activePath === "/sales/leads/referrals") return <SalesLeads segment={segment} onNavigate={onNavigate} onViewLead={(id) => onNavigate(`/sales/leads/${id}`)} />;
+    if (activePath === "/sales/clients") return <SalesClients segment={segment} onViewClient={(id) => onNavigate(`/sales/clients/${id}`)} />;
+    if (activePath === "/sales/policies") return <SalesPolicies segment={segment} onViewPolicy={(id) => onNavigate(`/sales/policies/${id}`)} />;
+    if (activePath === "/sales/retentions") return <SalesRetentions segment={segment} onViewClient={(id) => onNavigate(`/sales/clients/${id}`)} />;
+    if (activePath === "/sales/analytics") return <SalesAnalyticsHub />;
+    if (activePath === "/sales/alerts") return <SalesAlerts segment={segment} onNavigate={onNavigate} onViewClient={(id) => onNavigate(`/sales/clients/${id}`)} />;
     if (activePath === "/sales/agent-performance") return <AgentPerformance segment={segment} />;
-    if (activePath === "/sales/settings") return <SalesSettings />;
-    return <SalesDashboard segment={segment} onNavigate={onNavigate} />;
+    return homeDashboard;
   }
 
   // ── CAMPAIGNS ──────────────────────────────────────────────
@@ -95,7 +117,7 @@ export default function ModuleHome({ module, segment, activePath, onNavigate }: 
   // ── CONCIERGE ──────────────────────────────────────────────
   if (module === "concierge") {
     if (activePath === "/concierge/leads") return <ConciergeLeads />;
-    if (activePath === "/concierge/analytics") return <ConciergeAnalytics />;
+    if (activePath === "/concierge/analytics") return <ConciergeAnalyticsHub />;
     if (activePath === "/concierge/activity") return <ConciergeActivity />;
     return <ConciergeDashboard onNavigate={onNavigate} />;
   }
@@ -103,7 +125,7 @@ export default function ModuleHome({ module, segment, activePath, onNavigate }: 
   // ── CREDIT HEALTH ──────────────────────────────────────────
   if (module === "credit-health") {
     if (activePath === "/credit-health/leads") return <CreditHealthLeads />;
-    if (activePath === "/credit-health/analytics") return <CreditHealthAnalytics />;
+    if (activePath === "/credit-health/analytics") return <CreditHealthAnalyticsHub />;
     if (activePath === "/credit-health/activity") return <CreditHealthLeads />;
     return <CreditHealthDashboard onNavigate={onNavigate} />;
   }

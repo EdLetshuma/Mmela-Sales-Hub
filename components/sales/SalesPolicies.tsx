@@ -4,18 +4,20 @@ import React, { useEffect, useState, useCallback } from "react";
 import { Search, ChevronRight, Trash2 } from "lucide-react";
 import {
   getPolicies, getClients, getSalesUsers, createPolicy,
-  updatePolicy, deletePolicy, type SalesPolicy, type SalesClient, type SalesUser,
+  deletePolicy, type SalesPolicy, type SalesClient, type SalesUser,
 } from "@/lib/sales-api";
 import { useAuth } from "@/components/providers/AuthProvider";
 import { getSystemSettings, type SystemSettings } from "@/lib/settings-api";
 import type { ClientSegment } from "@/types";
 import AddPolicyModal, { type NewPolicyData } from "@/components/sales/AddPolicyModal";
-import PolicyDetailModal from "@/components/sales/PolicyDetailModal";
+import { SortableTh, sortRows, type SortDir } from "@/components/shared/SortableTh";
 
 interface SalesPoliciesProps {
   segment: ClientSegment;
   onViewPolicy?: (policyId: string) => void;
 }
+
+type SortKey = "policy_number" | "client" | "product" | "insurer" | "premium" | "inception_date" | "sold_by" | "status" | "docs";
 
 const STATUSES = ["Active", "Pending", "Canceled", "Retained", "Expired"];
 const INSURERS = ["Absa","Affinity","Auto & General","Auto and General","Brightrock","Budget","Budget Insurance","Envi Africa","King Price","MiWay","Profusion","Quicksure","Santam","SAU"];
@@ -65,10 +67,16 @@ export default function SalesPolicies({ segment, onViewPolicy }: SalesPoliciesPr
   const [insurerFilter, setInsurerFilter] = useState("");
   const [docsFilter, setDocsFilter] = useState("");
   const [page, setPage] = useState(1);
+  const [sortKey, setSortKey] = useState<SortKey | null>(null);
+  const [sortDir, setSortDir] = useState<SortDir>("asc");
+
+  function handleSort(key: SortKey) {
+    if (sortKey === key) setSortDir((d) => (d === "asc" ? "desc" : "asc"));
+    else { setSortKey(key); setSortDir("asc"); }
+  }
 
   // Modals
   const [addModalOpen, setAddModalOpen] = useState(false);
-  const [detailPolicy, setDetailPolicy] = useState<SalesPolicy | null>(null);
 
   const fetchAll = useCallback(async () => {
     setLoading(true);
@@ -88,9 +96,25 @@ export default function SalesPolicies({ segment, onViewPolicy }: SalesPoliciesPr
 
   useEffect(() => { fetchAll(); }, [fetchAll]);
 
-  const filtered = policies.filter((p) =>
+  const clientName = (id?: string | null) => clients.find((c) => c.id === id)?.name ?? "—";
+  const soldByName = (id?: string | null) => users.find((u) => u.id === id)?.name ?? "—";
+
+  const searched = policies.filter((p) =>
     !search || (p.policy_number ?? "").toLowerCase().includes(search.toLowerCase())
   );
+  const filtered = sortRows(searched, sortKey, sortDir, (p, key) => {
+    switch (key) {
+      case "policy_number": return p.policy_number;
+      case "client": return clientName(p.client_id);
+      case "product": return p.product_name;
+      case "insurer": return p.insurer;
+      case "premium": return Number(p.premium ?? 0);
+      case "inception_date": return p.inception_date;
+      case "sold_by": return soldByName(p.sold_by_user_id);
+      case "status": return p.status;
+      case "docs": return p.documentation_status;
+    }
+  });
   const totalPages = Math.ceil(filtered.length / PAGE_SIZE);
   const paginated = filtered.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE);
 
@@ -100,19 +124,9 @@ export default function SalesPolicies({ segment, onViewPolicy }: SalesPoliciesPr
   const docsPending = policies.filter((p) => p.documentation_status === "Pending").length;
   const totalPremium = policies.filter((p) => p.status === "Active").reduce((s, p) => s + Number(p.premium ?? 0), 0);
 
-  const soldByName = (id?: string | null) => users.find((u) => u.id === id)?.name ?? "—";
-  const clientName = (id?: string | null) => clients.find((c) => c.id === id)?.name ?? "—";
-
   async function handleAddPolicy(data: NewPolicyData) {
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     await createPolicy(data as any);
-    await fetchAll();
-  }
-
-  async function handleUpdatePolicy(updates: Partial<SalesPolicy>) {
-    if (!detailPolicy) return;
-    const updated = await updatePolicy(detailPolicy.id, updates);
-    setDetailPolicy(updated);
     await fetchAll();
   }
 
@@ -177,14 +191,21 @@ export default function SalesPolicies({ segment, onViewPolicy }: SalesPoliciesPr
           <table className="w-full text-sm border-collapse">
             <thead>
               <tr className="bg-gray-50 border-b border-gray-200">
-                {["Policy #", "Client", "Product", "Insurer", "Premium", "Inception", "Sold by", "Status", "Docs", ""].map((h) => (
-                  <th key={h} className="px-4 py-2.5 text-left text-xs font-medium text-gray-500">{h}</th>
-                ))}
+                <SortableTh label="Policy #" sortKey="policy_number" activeKey={sortKey} dir={sortDir} onSort={handleSort} />
+                <SortableTh label="Client" sortKey="client" activeKey={sortKey} dir={sortDir} onSort={handleSort} />
+                <SortableTh label="Product" sortKey="product" activeKey={sortKey} dir={sortDir} onSort={handleSort} />
+                <SortableTh label="Insurer" sortKey="insurer" activeKey={sortKey} dir={sortDir} onSort={handleSort} />
+                <SortableTh label="Premium" sortKey="premium" activeKey={sortKey} dir={sortDir} onSort={handleSort} />
+                <SortableTh label="Inception" sortKey="inception_date" activeKey={sortKey} dir={sortDir} onSort={handleSort} />
+                <SortableTh label="Sold by" sortKey="sold_by" activeKey={sortKey} dir={sortDir} onSort={handleSort} />
+                <SortableTh label="Status" sortKey="status" activeKey={sortKey} dir={sortDir} onSort={handleSort} />
+                <SortableTh label="Docs" sortKey="docs" activeKey={sortKey} dir={sortDir} onSort={handleSort} />
+                <th className="px-4 py-2.5"></th>
               </tr>
             </thead>
             <tbody className="divide-y divide-gray-100">
               {paginated.map((policy) => (
-                <tr key={policy.id} className="hover:bg-gray-50 cursor-pointer transition-colors" onClick={() => setDetailPolicy(policy)}>
+                <tr key={policy.id} className="hover:bg-gray-50 cursor-pointer transition-colors" onClick={() => onViewPolicy?.(policy.id)}>
                   <td className="px-4 py-3 font-mono text-xs text-brand-800 font-medium">{policy.policy_number}</td>
                   <td className="px-4 py-3 text-gray-700 text-xs">{clientName(policy.client_id)}</td>
                   <td className="px-4 py-3">
@@ -245,18 +266,6 @@ export default function SalesPolicies({ segment, onViewPolicy }: SalesPoliciesPr
           users={users}
           settings={settings}
           segment={segment}
-        />
-      )}
-
-      {/* Policy detail modal */}
-      {detailPolicy && (
-        <PolicyDetailModal
-          isOpen={!!detailPolicy}
-          onClose={() => setDetailPolicy(null)}
-          policy={detailPolicy}
-          clientName={clientName(detailPolicy.client_id)}
-          onEdit={() => { /* edit inline in modal */ }}
-          onUpdatePolicy={handleUpdatePolicy}
         />
       )}
     </div>

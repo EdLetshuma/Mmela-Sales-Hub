@@ -1,11 +1,11 @@
 "use client";
 
 import React, { useEffect, useState, useCallback } from "react";
-import { Plus, Edit2, Trash2, Mail, X, Play } from "lucide-react";
+import { Plus, Edit2, Trash2, Mail, X, Play, ToggleRight, ToggleLeft } from "lucide-react";
 import { supabase } from "@/lib/supabase";
 import {
   getReportMailings, createReportMailing, updateReportMailing, deleteReportMailing,
-  REPORT_TYPES, type ReportMailing,
+  REPORT_TYPES, DATE_RANGE_OPTIONS, type ReportMailing, type ReportDateRange,
 } from "@/lib/catalog-api";
 
 const DAYS = ["Sunday","Monday","Tuesday","Wednesday","Thursday","Friday","Saturday"];
@@ -40,6 +40,7 @@ function MailingModal({
     day_of_week:  mailing?.day_of_week ?? 1,
     day_of_month: mailing?.day_of_month ?? 1,
     send_hour:    mailing?.send_hour ?? 7,
+    date_range:   (mailing?.date_range ?? "all") as ReportDateRange,
     recipients:   (mailing?.recipients ?? []).join(", "),
     subject:      (mailing as ExtendedMailing)?.subject ?? "",
     message:      (mailing as ExtendedMailing)?.message ?? "",
@@ -84,6 +85,19 @@ function MailingModal({
                 {REPORT_TYPES.map((r) => <option key={r.value} value={r.value}>{r.label}</option>)}
               </select>
               {selectedReport && <p className="text-xs text-gray-400 mt-1">Unit: {selectedReport.unit === "all" ? "All units" : selectedReport.unit}</p>}
+            </div>
+            <div>
+              <label className="text-xs text-gray-500 mb-1 block">Data range</label>
+              <select className="input-field" value={form.date_range} onChange={(e) => setForm((f) => ({ ...f, date_range: e.target.value as ReportDateRange }))}>
+                {DATE_RANGE_OPTIONS.map((r) => <option key={r.value} value={r.value}>{r.label}</option>)}
+              </select>
+              <p className="text-xs text-gray-400 mt-1">
+                {form.date_range === "since_last_sent"
+                  ? "Only rows added since this mailing last sent — falls back to all data on the first send."
+                  : form.date_range === "all"
+                  ? "Includes every row, regardless of date — the original behavior."
+                  : "Limits the report to rows within this period, relative to when it sends."}
+              </p>
             </div>
             <div className="grid grid-cols-3 gap-3">
               <div>
@@ -178,7 +192,7 @@ function TestRunModal({ mailing, onClose }: { mailing: ExtendedMailing; onClose:
         </div>
 
         <p className="text-sm text-gray-600 mb-4">
-          Send a test version of this mailing to a single email address. Recipients won't be notified and the last-sent date won't update.
+          Send a test version of this mailing to a single email address. Recipients won&apos;t be notified and the last-sent date won&apos;t update.
         </p>
 
         {result && (
@@ -280,7 +294,7 @@ export default function HubScheduled() {
           <table className="w-full text-sm border-collapse">
             <thead>
               <tr className="bg-gray-50 border-b border-gray-200">
-                {["Name","Report","Schedule","Recipients","Message","Last sent","Status",""].map((h) => (
+                {["Name","Report","Range","Schedule","Recipients","Message","Last sent","Status",""].map((h) => (
                   <th key={h} className="px-4 py-2.5 text-left text-xs font-medium text-gray-500">{h}</th>
                 ))}
               </tr>
@@ -292,6 +306,7 @@ export default function HubScheduled() {
                   <tr key={m.id} className="hover:bg-gray-50">
                     <td className="px-4 py-3 font-medium text-gray-900">{m.name}</td>
                     <td className="px-4 py-3 text-gray-600 text-xs">{report?.label ?? m.report_type}</td>
+                    <td className="px-4 py-3 text-gray-500 text-xs whitespace-nowrap">{DATE_RANGE_OPTIONS.find((r) => r.value === m.date_range)?.label ?? "All data"}</td>
                     <td className="px-4 py-3 text-gray-500 text-xs whitespace-nowrap">{scheduleLabel(m)}</td>
                     <td className="px-4 py-3 text-gray-500 text-xs">{m.recipients.length} recipient{m.recipients.length !== 1 ? "s" : ""}</td>
                     <td className="px-4 py-3 text-gray-400 text-xs max-w-xs">
@@ -325,11 +340,15 @@ export default function HubScheduled() {
                           <Play className="w-3 h-3" /> Test
                         </button>
                         <button
-                          className="text-xs font-medium"
-                          style={{ color: m.active ? "#854F0B" : "#0F6E56" }}
                           onClick={() => handleToggle(m)}
+                          className={`btn text-xs gap-1.5 ${m.active ? "btn-secondary" : "btn-primary"}`}
+                          title={m.active ? "Pause" : "Resume"}
                         >
-                          {m.active ? "Pause" : "Resume"}
+                          {m.active ? (
+                            <><ToggleRight className="w-4 h-4 text-green-600" /> Active</>
+                          ) : (
+                            <><ToggleLeft className="w-4 h-4" /> Paused</>
+                          )}
                         </button>
                         <button
                           className="btn btn-ghost p-1 text-red-400 hover:text-red-600"

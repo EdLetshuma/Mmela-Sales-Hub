@@ -2,6 +2,7 @@
 
 import React, { useState } from "react";
 import { X, Copy, Check, Code2, Globe, Smartphone } from "lucide-react";
+import { getFormUrl } from "@/lib/site-url";
 
 interface EmbedSnippetModalProps {
   formName: string;
@@ -19,13 +20,7 @@ export default function EmbedSnippetModal({
   const [embedType, setEmbedType] = useState<EmbedType>("iframe");
   const [copied, setCopied] = useState(false);
 
-  // Use window.location.origin at runtime so it works on any domain
-  const origin =
-    typeof window !== "undefined"
-      ? window.location.origin
-      : "https://mmela-sales-hub-edletshumas-projects.vercel.app";
-
-  const formUrl = `${origin}/f/${formSlug}`;
+  const formUrl = getFormUrl(formSlug);
 
   const snippets: Record<EmbedType, { code: string; label: string; description: string }> = {
     iframe: {
@@ -225,7 +220,7 @@ export default function EmbedSnippetModal({
             <p>Paste this code into the HTML of any webpage where you want the form to appear. Works with WordPress, Wix, Webflow, or plain HTML.</p>
           )}
           {embedType === "link" && (
-            <p>Drop this HTML snippet anywhere in your page. The button opens the form in a new browser tab so visitors don't leave your site.</p>
+            <p>Drop this HTML snippet anywhere in your page. The button opens the form in a new browser tab so visitors don&apos;t leave your site.</p>
           )}
           {embedType === "popup" && (
             <p>Paste both the button and the modal div into your page HTML. Clicking the button opens the form as an overlay without any page navigation.</p>

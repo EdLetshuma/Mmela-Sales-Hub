@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import { signIn, sendPasswordReset } from "@/lib/auth";
 import { Eye, EyeOff, ArrowRight, Mail } from "lucide-react";
 
@@ -52,7 +52,7 @@ export default function LoginForm() {
               </div>
             ) : (
               <form onSubmit={handleForgotPassword} className="space-y-4">
-                <p className="text-sm text-gray-500">Enter your email and we'll send you a reset link.</p>
+                <p className="text-sm text-gray-500">Enter your email and we&apos;ll send you a reset link.</p>
                 {error && <div className="bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded-lg text-sm">{error}</div>}
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-1.5">Email address</label>

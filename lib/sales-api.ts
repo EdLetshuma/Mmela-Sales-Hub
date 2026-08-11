@@ -1,5 +1,12 @@
 import { supabase } from "./supabase";
 import type { ClientSegment } from "@/types";
+import { CONCIERGE_UNIT_ID } from "./concierge-api";
+import { CREDIT_HEALTH_UNIT_ID } from "./credit-health-api";
+
+// The Sales business unit's id — most legacy Sales leads predate business
+// units and have a null business_unit_id, so "is a Sales lead" means
+// "not tagged as Concierge or Credit Health" rather than an exact match.
+export const SALES_UNIT_ID = "75299d6f-408d-4f5c-8e91-63ac5d965866";
 
 // ============================================================
 // SHARED TYPES
@@ -152,6 +159,115 @@ export async function checkDuplicateLeads(
     return [];
   }
   return data ?? [];
+}
+
+export interface DuplicateClientMatch {
+  id: string; name: string; phone: string | null; email: string | null;
+  id_number: string | null; segment: string | null; join_date: string | null;
+}
+
+export async function checkDuplicateClients(
+  phone: string | null | undefined,
+  email: string | null | undefined,
+  idNumber?: string | null,
+  excludeId?: string
+): Promise<DuplicateClientMatch[]> {
+  const cleanPhone = phone?.trim() || null;
+  const cleanEmail = email?.trim().toLowerCase() || null;
+  const cleanIdNumber = idNumber?.trim() || null;
+
+  if (
+    (!cleanPhone || cleanPhone === "n/a") &&
+    (!cleanEmail || cleanEmail.includes("@placeholder.com")) &&
+    !cleanIdNumber
+  ) {
+    return [];
+  }
+
+  const { data, error } = await supabase.rpc("find_duplicate_clients", {
+    p_phone:      cleanPhone,
+    p_email:      cleanEmail?.includes("@placeholder.com") ? null : cleanEmail,
+    p_id_number:  cleanIdNumber,
+    p_exclude_id: excludeId ?? null,
+  });
+
+  if (error) {
+    console.error("Duplicate client check error:", error);
+    return [];
+  }
+  return data ?? [];
+}
+
+export interface DuplicatePolicyMatch {
+  id: string; policy_number: string; client_id: string | null; client_name: string | null;
+  insurer: string | null; product_name: string | null; status: string;
+}
+
+export async function checkDuplicatePolicies(
+  policyNumber: string | null | undefined,
+  clientId?: string | null,
+  insurer?: string | null,
+  productName?: string | null,
+  excludeId?: string
+): Promise<DuplicatePolicyMatch[]> {
+  const cleanNumber = policyNumber?.trim() || null;
+  if (!cleanNumber && !(clientId && insurer && productName)) return [];
+
+  const { data, error } = await supabase.rpc("find_duplicate_policies", {
+    p_policy_number: cleanNumber,
+    p_client_id: clientId ?? null,
+    p_insurer: insurer ?? null,
+    p_product_name: productName ?? null,
+    p_exclude_id: excludeId ?? null,
+  });
+
+  if (error) {
+    console.error("Duplicate policy check error:", error);
+    return [];
+  }
+  return data ?? [];
+}
+
+export interface ExtractedPolicyDocData {
+  client_name?: string;
+  client_id_number?: string;
+  client_email?: string;
+  client_phone?: string;
+  policy_number?: string;
+  insurer?: string;
+  product_name?: string;
+  base_premium?: number;
+  inception_date?: string;
+}
+
+// Uploads a policy PDF to the server, which extracts its text and asks a
+// self-hosted Ollama model to pull out structured fields for auto-fill.
+export async function extractPolicyDocument(file: File): Promise<ExtractedPolicyDocData> {
+  const {
+    data: { session },
+  } = await supabase.auth.getSession();
+  if (!session) throw new Error("Not authenticated");
+
+  const formData = new FormData();
+  formData.append("file", file);
+
+  const res = await fetch("/api/extract-policy", {
+    method: "POST",
+    headers: { Authorization: `Bearer ${session.access_token}` },
+    body: formData,
+  });
+
+  if (!res.headers.get("content-type")?.includes("application/json")) {
+    throw new Error(
+      res.status === 504 || res.status === 502
+        ? "The AI server took too long to respond (timed out). It may be overloaded — try again, or use a smaller/faster model."
+        : `Unexpected server response (HTTP ${res.status}). Check the Ollama server is reachable.`
+    );
+  }
+
+  const body = await res.json();
+  if (!res.ok) throw new Error(body.error || "Extraction failed");
+  return body;
 }
 
 export async function createLead(
@@ -477,7 +593,8 @@ export async function getDashboardStats(
 
   let leadsQuery = supabase
     .from("leads")
-    .select("id, status, assigned_to_user_id, created_at, segment");
+    .select("id, status, assigned_to_user_id, created_at, segment")
+    .or(`business_unit_id.is.null,business_unit_id.eq.${SALES_UNIT_ID}`);
   let policiesQuery = supabase
     .from("policies")
     .select("id, status, premium, client_segment");
@@ -534,6 +651,370 @@ export async function getDashboardStats(
       lost: leads.filter((l) => l.status === "Lost").length,
     },
     unassignedLeads: leads.filter((l) => !l.assigned_to_user_id).length,
+  };
+}
+
+// Personal, agent-scoped equivalent of getDashboardStats — only counts
+// this user's own assigned leads / sold policies / created clients, so an
+// agent's dashboard never reveals company-wide volumes they don't hold
+// the View Executive Dashboard permission to see.
+export async function getMyDashboardStats(
+  userId: string,
+  segment?: ClientSegment
+): Promise<SalesDashboardStats> {
+  const now = new Date();
+  const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1).toISOString();
+
+  let leadsQuery = supabase
+    .from("leads")
+    .select("id, status, assigned_to_user_id, created_at, segment")
+    .eq("assigned_to_user_id", userId);
+  let policiesQuery = supabase
+    .from("policies")
+    .select("id, status, premium, client_segment")
+    .eq("sold_by_user_id", userId);
+  let clientsQuery = supabase.from("clients").select("id, segment").eq("created_by_user_id", userId);
+
+  if (segment) {
+    leadsQuery = leadsQuery.eq("segment", segment);
+    policiesQuery = policiesQuery.eq("client_segment", segment);
+    clientsQuery = clientsQuery.eq("segment", segment);
+  }
+
+  const [leadsRes, policiesRes, clientsRes] = await Promise.all([leadsQuery, policiesQuery, clientsQuery]);
+  if (leadsRes.error) throw leadsRes.error;
+  if (policiesRes.error) throw policiesRes.error;
+  if (clientsRes.error) throw clientsRes.error;
+
+  const leads = leadsRes.data || [];
+  const policies = policiesRes.data || [];
+  const clients = clientsRes.data || [];
+
+  const leadsThisMonth = leads.filter((l) => l.created_at && l.created_at >= startOfMonth).length;
+  const activePolicies = policies.filter((p) => p.status === "Active");
+  const totalMonthlyPremium = activePolicies.reduce((sum, p) => sum + (Number(p.premium) || 0), 0);
+  const won = leads.filter((l) => l.status === "Won").length;
+  const conversionRate = leads.length > 0 ? Math.round((won / leads.length) * 1000) / 10 : 0;
+
+  return {
+    totalLeads: leads.length,
+    leadsThisMonth,
+    totalClients: clients.length,
+    activePolicies: activePolicies.length,
+    totalMonthlyPremium,
+    conversionRate,
+    pipeline: {
+      prospect: leads.filter((l) => l.status === "Prospect").length,
+      contacted: leads.filter((l) => l.status === "Contacted").length,
+      quoted: leads.filter((l) => l.status === "Quoted").length,
+      won,
+      lost: leads.filter((l) => l.status === "Lost").length,
+    },
+    unassignedLeads: 0,
+  };
+}
+
+// ============================================================
+// POLICY ADMIN OVERVIEW — for roles without lead access (e.g.
+// Policy Admin) whose job is clients/policies/retentions, not leads
+// ============================================================
+
+export interface PolicyAdminOverview {
+  totalClients: number;
+  activePolicies: number;
+  totalMonthlyPremium: number;
+  pendingDocs: number;
+  retentionsCount: number;
+  policyStatus: { active: number; pending: number; canceled: number; expired: number; retained: number };
+  recentClients: { id: string; name: string; segment: string | null; join_date: string | null }[];
+}
+
+export async function getPolicyAdminOverview(segment?: ClientSegment): Promise<PolicyAdminOverview> {
+  let clientsQuery = supabase.from("clients").select("id, name, segment, join_date").order("join_date", { ascending: false });
+  let policiesQuery = supabase.from("policies").select("id, status, premium, client_segment, documentation_status");
+
+  if (segment) {
+    clientsQuery = clientsQuery.eq("segment", segment);
+    policiesQuery = policiesQuery.eq("client_segment", segment);
+  }
+
+  const [clientsRes, policiesRes] = await Promise.all([clientsQuery, policiesQuery]);
+  if (clientsRes.error) throw clientsRes.error;
+  if (policiesRes.error) throw policiesRes.error;
+
+  const clients = clientsRes.data ?? [];
+  const policies = policiesRes.data ?? [];
+  const activePolicies = policies.filter((p) => p.status === "Active");
+
+  return {
+    totalClients: clients.length,
+    activePolicies: activePolicies.length,
+    totalMonthlyPremium: activePolicies.reduce((s, p) => s + (Number(p.premium) || 0), 0),
+    pendingDocs: activePolicies.filter((p) => p.documentation_status !== "Complete").length,
+    retentionsCount: policies.filter((p) => p.status === "Canceled" || p.status === "Expired").length,
+    policyStatus: {
+      active: activePolicies.length,
+      pending: policies.filter((p) => p.status === "Pending").length,
+      canceled: policies.filter((p) => p.status === "Canceled").length,
+      expired: policies.filter((p) => p.status === "Expired").length,
+      retained: policies.filter((p) => p.status === "Retained").length,
+    },
+    recentClients: clients.slice(0, 6).map((c) => ({ id: c.id, name: c.name, segment: c.segment, join_date: c.join_date })),
+  };
+}
+
+// ============================================================
+// EXECUTIVE OVERVIEW — cross-business-unit dashboard, gated
+// behind the View Executive Dashboard permission
+// ============================================================
+
+export interface ExecutiveUnitStats {
+  leads: number;
+  clients?: number;
+  activePolicies?: number;
+  monthlyPremium?: number;
+  active?: number;
+  closed?: number;
+  unassigned: number;
+  growthPct: number;
+}
+
+export type ExecutiveRange = "30d" | "90d" | "mtd" | "ytd" | "all";
+
+export const EXECUTIVE_RANGE_LABELS: Record<ExecutiveRange, string> = {
+  "30d": "Last 30 days",
+  "90d": "Last 90 days",
+  mtd: "Month to date",
+  ytd: "Year to date",
+  all: "All time",
+};
+
+export interface ExecutiveOverview {
+  totals: {
+    totalLeads: number;
+    periodGrowthPct: number;
+    totalClients: number;
+    activePolicies: number;
+    totalMonthlyPremium: number;
+    conversionRate: number;
+    unassignedLeads: number;
+  };
+  pipeline: { prospect: number; contacted: number; quoted: number; won: number; lost: number };
+  units: {
+    personal: ExecutiveUnitStats;
+    commercial: ExecutiveUnitStats;
+    concierge: ExecutiveUnitStats;
+    creditHealth: ExecutiveUnitStats;
+  };
+  monthlyTrend: { month: string; leads: number; converted: number }[];
+  recentLeads: {
+    id: string; name: string; unit: string; source: string | null;
+    status: string; created_at: string;
+  }[];
+  alerts: { id: string; label: string; detail: string; tone: "warning" | "danger" }[];
+  topPerformers: { userId: string; name: string; role: string; closed: number }[];
+}
+
+const MONTH_LABELS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+
+// "All time" has no natural previous period to compare against, so growth
+// there falls back to the current calendar month vs the previous one —
+// every other range compares against an equal-length period right before it.
+export function rangeToDates(range: ExecutiveRange, now: Date): { since: Date | null; prevSince: Date | null; prevUntil: Date | null } {
+  if (range === "all") return { since: null, prevSince: null, prevUntil: null };
+  let since: Date;
+  if (range === "30d") since = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000);
+  else if (range === "90d") since = new Date(now.getTime() - 90 * 24 * 60 * 60 * 1000);
+  else if (range === "mtd") since = new Date(now.getFullYear(), now.getMonth(), 1);
+  else since = new Date(now.getFullYear(), 0, 1); // ytd
+  const spanMs = now.getTime() - since.getTime();
+  return { since, prevSince: new Date(since.getTime() - spanMs), prevUntil: since };
+}
+
+export async function getExecutiveOverview(range: ExecutiveRange = "30d"): Promise<ExecutiveOverview> {
+  const now = new Date();
+  const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1).toISOString();
+  const startOfLastMonth = new Date(now.getFullYear(), now.getMonth() - 1, 1).toISOString();
+  const { since, prevSince, prevUntil } = rangeToDates(range, now);
+  const inRange = (l: { created_at: string }) => !since || l.created_at >= since.toISOString();
+  const closedInRange = (l: { closed_at: string | null }) =>
+    !!l.closed_at && (!since || l.closed_at >= since.toISOString());
+
+  const [leadsRes, clientsRes, policiesRes, usersRes] = await Promise.all([
+    supabase.from("leads").select(
+      "id, name, status, segment, source, business_unit_id, assigned_to_user_id, created_at, closed_at, unit_status"
+    ),
+    supabase.from("clients").select("id, segment"),
+    supabase.from("policies").select("id, status, premium, client_segment, documentation_status"),
+    supabase.from("users").select("id, name, role"),
+  ]);
+  if (leadsRes.error) throw leadsRes.error;
+  if (clientsRes.error) throw clientsRes.error;
+  if (policiesRes.error) throw policiesRes.error;
+  if (usersRes.error) throw usersRes.error;
+
+  const allLeads = leadsRes.data ?? [];
+  const allClients = clientsRes.data ?? [];
+  const allPolicies = policiesRes.data ?? [];
+  const users = usersRes.data ?? [];
+
+  const isSales = (bu: string | null) => !bu || bu === SALES_UNIT_ID;
+  // "All" variants are unfiltered by date — needed so growth() can look at
+  // the previous period, which the range-filtered variants have discarded.
+  const salesLeadsAll = allLeads.filter((l) => isSales(l.business_unit_id));
+  const conciergeLeadsAll = allLeads.filter((l) => l.business_unit_id === CONCIERGE_UNIT_ID);
+  const creditHealthLeadsAll = allLeads.filter((l) => l.business_unit_id === CREDIT_HEALTH_UNIT_ID);
+  const salesLeads = salesLeadsAll.filter(inRange);
+  const conciergeLeads = conciergeLeadsAll.filter(inRange);
+  const creditHealthLeads = creditHealthLeadsAll.filter(inRange);
+
+  // Client/policy counts reflect current state, not the selected period —
+  // "42 active policies" isn't a historical event to filter by date.
+  const activePolicies = allPolicies.filter((p) => p.status === "Active");
+  const totalMonthlyPremium = activePolicies.reduce((s, p) => s + (Number(p.premium) || 0), 0);
+  const won = salesLeads.filter((l) => l.status === "Won").length;
+  const conversionRate = salesLeads.length > 0 ? Math.round((won / salesLeads.length) * 1000) / 10 : 0;
+  const unassignedLeads = salesLeads.filter((l) => !l.assigned_to_user_id).length;
+
+  function growth(list: { created_at: string }[]): number {
+    if (!since || !prevSince || !prevUntil) {
+      const thisM = list.filter((l) => l.created_at >= startOfMonth).length;
+      const lastM = list.filter((l) => l.created_at >= startOfLastMonth && l.created_at < startOfMonth).length;
+      if (lastM === 0) return thisM > 0 ? 100 : 0;
+      return Math.round(((thisM - lastM) / lastM) * 1000) / 10;
+    }
+    const curr = list.filter((l) => l.created_at >= since.toISOString()).length;
+    const prev = list.filter((l) => l.created_at >= prevSince.toISOString() && l.created_at < prevUntil.toISOString()).length;
+    if (prev === 0) return curr > 0 ? 100 : 0;
+    return Math.round(((curr - prev) / prev) * 1000) / 10;
+  }
+
+  const personalLeadsAll = salesLeadsAll.filter((l) => l.segment === "Individual");
+  const commercialLeadsAll = salesLeadsAll.filter((l) => l.segment === "Commercial");
+  const personalLeads = salesLeads.filter((l) => l.segment === "Individual");
+  const commercialLeads = salesLeads.filter((l) => l.segment === "Commercial");
+  const personalActivePolicies = activePolicies.filter((p) => p.client_segment === "Individual");
+  const commercialActivePolicies = activePolicies.filter((p) => p.client_segment === "Commercial");
+
+  const units: ExecutiveOverview["units"] = {
+    personal: {
+      leads: personalLeads.length,
+      clients: allClients.filter((c) => c.segment === "Individual").length,
+      activePolicies: personalActivePolicies.length,
+      monthlyPremium: personalActivePolicies.reduce((s, p) => s + (Number(p.premium) || 0), 0),
+      unassigned: personalLeads.filter((l) => !l.assigned_to_user_id).length,
+      growthPct: growth(personalLeadsAll),
+    },
+    commercial: {
+      leads: commercialLeads.length,
+      clients: allClients.filter((c) => c.segment === "Commercial").length,
+      activePolicies: commercialActivePolicies.length,
+      monthlyPremium: commercialActivePolicies.reduce((s, p) => s + (Number(p.premium) || 0), 0),
+      unassigned: commercialLeads.filter((l) => !l.assigned_to_user_id).length,
+      growthPct: growth(commercialLeadsAll),
+    },
+    concierge: {
+      leads: conciergeLeads.length,
+      active: conciergeLeads.filter((l) => ["Contacted", "Sourcing", "Quote Sent"].includes(l.unit_status ?? "")).length,
+      closed: conciergeLeads.filter((l) => l.unit_status === "Won").length,
+      unassigned: conciergeLeads.filter((l) => !l.assigned_to_user_id).length,
+      growthPct: growth(conciergeLeadsAll),
+    },
+    creditHealth: {
+      leads: creditHealthLeads.length,
+      active: creditHealthLeads.filter((l) => ["Contacted", "Assessment", "Submitted"].includes(l.unit_status ?? "")).length,
+      closed: creditHealthLeads.filter((l) => l.unit_status === "Approved").length,
+      unassigned: creditHealthLeads.filter((l) => !l.assigned_to_user_id).length,
+      growthPct: growth(creditHealthLeadsAll),
+    },
+  };
+
+  // Last 6 months, all units combined
+  const monthlyTrend: ExecutiveOverview["monthlyTrend"] = [];
+  for (let i = 5; i >= 0; i--) {
+    const start = new Date(now.getFullYear(), now.getMonth() - i, 1);
+    const end = new Date(now.getFullYear(), now.getMonth() - i + 1, 1);
+    const inMonth = allLeads.filter((l) => l.created_at >= start.toISOString() && l.created_at < end.toISOString());
+    const convertedInMonth = allLeads.filter(
+      (l) => l.closed_at && l.closed_at >= start.toISOString() && l.closed_at < end.toISOString() &&
+        (l.status === "Won" || l.unit_status === "Won" || l.unit_status === "Approved")
+    );
+    monthlyTrend.push({ month: MONTH_LABELS[start.getMonth()], leads: inMonth.length, converted: convertedInMonth.length });
+  }
+
+  const unitLabel = (bu: string | null, segment: string | null) => {
+    if (bu === CONCIERGE_UNIT_ID) return "Concierge";
+    if (bu === CREDIT_HEALTH_UNIT_ID) return "Credit Health";
+    return segment === "Commercial" ? "Commercial Insurance" : "Personal Insurance";
+  };
+
+  const recentLeads = allLeads
+    .filter(inRange)
+    .sort((a, b) => (b.created_at ?? "").localeCompare(a.created_at ?? ""))
+    .slice(0, 6)
+    .map((l) => ({
+      id: l.id,
+      name: l.name,
+      unit: unitLabel(l.business_unit_id, l.segment),
+      source: l.source,
+      status: l.unit_status ?? l.status ?? "—",
+      created_at: l.created_at,
+    }));
+
+  const alerts: ExecutiveOverview["alerts"] = [];
+  if (unassignedLeads > 0) {
+    alerts.push({ id: "unassigned-sales", label: `${unassignedLeads} unassigned sales lead${unassignedLeads !== 1 ? "s" : ""}`, detail: "Personal + Commercial Insurance", tone: "warning" });
+  }
+  if (units.concierge.unassigned > 0) {
+    alerts.push({ id: "unassigned-concierge", label: `${units.concierge.unassigned} unassigned Concierge lead${units.concierge.unassigned !== 1 ? "s" : ""}`, detail: "Vehicle sourcing", tone: "warning" });
+  }
+  if (units.creditHealth.unassigned > 0) {
+    alerts.push({ id: "unassigned-credit", label: `${units.creditHealth.unassigned} unassigned Credit Health lead${units.creditHealth.unassigned !== 1 ? "s" : ""}`, detail: "Debt review & advisory", tone: "warning" });
+  }
+  const pendingDocs = activePolicies.filter((p) => p.documentation_status !== "Complete").length;
+  if (pendingDocs > 0) {
+    alerts.push({ id: "pending-docs", label: `${pendingDocs} active polic${pendingDocs !== 1 ? "ies" : "y"} missing documentation`, detail: "Documentation status incomplete", tone: "danger" });
+  }
+
+  const closedInPeriod = allLeads.filter(
+    (l) => closedInRange(l) &&
+      (l.status === "Won" || l.unit_status === "Won" || l.unit_status === "Approved")
+  );
+  const closedByUser = new Map<string, number>();
+  closedInPeriod.forEach((l) => {
+    if (!l.assigned_to_user_id) return;
+    closedByUser.set(l.assigned_to_user_id, (closedByUser.get(l.assigned_to_user_id) ?? 0) + 1);
+  });
+  const topPerformers = Array.from(closedByUser.entries())
+    .map(([userId, closed]) => {
+      const u = users.find((usr) => usr.id === userId);
+      return { userId, name: u?.name ?? "Unknown", role: u?.role ?? "—", closed };
+    })
+    .sort((a, b) => b.closed - a.closed)
+    .slice(0, 5);
+
+  return {
+    totals: {
+      totalLeads: salesLeads.length,
+      periodGrowthPct: growth(salesLeadsAll),
+      totalClients: allClients.length,
+      activePolicies: activePolicies.length,
+      totalMonthlyPremium,
+      conversionRate,
+      unassignedLeads,
+    },
+    pipeline: {
+      prospect: salesLeads.filter((l) => l.status === "Prospect").length,
+      contacted: salesLeads.filter((l) => l.status === "Contacted").length,
+      quoted: salesLeads.filter((l) => l.status === "Quoted").length,
+      won,
+      lost: salesLeads.filter((l) => l.status === "Lost").length,
+    },
+    units,
+    monthlyTrend,
+    recentLeads,
+    alerts,
+    topPerformers,
   };
 }
 
@@ -595,6 +1076,31 @@ export async function getSalesUsers(): Promise<SalesUser[]> {
     .order("name");
   if (error) throw error;
   return data || [];
+}
+
+export interface NewClientData {
+  name: string;
+  email: string;
+  phone?: string;
+  id_number?: string;
+  address?: string;
+  segment: ClientSegment;
+  title?: string;
+  occupation?: string;
+  created_by_user_id?: string;
+}
+
+// Adds a client directly, bypassing the lead pipeline — for Policy Admins
+// and others who capture a walk-in / existing client without ever having
+// worked them as a lead.
+export async function createClient(client: NewClientData): Promise<SalesClient> {
+  const { data, error } = await supabase
+    .from("clients")
+    .insert({ ...client, join_date: new Date().toISOString().split("T")[0] })
+    .select()
+    .single();
+  if (error) throw error;
+  return data;
 }
 
 export async function deleteClient(id: string): Promise<void> {

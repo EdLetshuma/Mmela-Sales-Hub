@@ -11,7 +11,7 @@ import {
 } from "@/lib/campaigns-api";
 import type { RoutingRule, BusinessUnit, Campaign } from "@/types";
 import { RoutingMethod } from "@/types";
-import { Plus, X, Settings, Trash2, Power, PowerOff } from "lucide-react";
+import { Plus, X, Settings, Trash2, ToggleRight, ToggleLeft } from "lucide-react";
 
 export default function RoutingRules() {
   const [rules, setRules] = useState<RoutingRule[]>([]);
@@ -76,7 +76,7 @@ export default function RoutingRules() {
                   </span>
                   {rule.campaign_id && (
                     <span className="badge bg-gray-100 text-gray-600">
-                      {getName(campaigns as any, rule.campaign_id)}
+                      {getName(campaigns, rule.campaign_id)}
                     </span>
                   )}
                   <span className={`badge ${rule.is_active ? "badge-contacted" : "bg-gray-100 text-gray-500"}`}>
@@ -91,8 +91,16 @@ export default function RoutingRules() {
                   {rule.assigned_user_ids.map((id) => getName(users, id)).join(", ")}
                 </p>
               </div>
-              <button onClick={() => handleToggle(rule)} className="btn btn-ghost px-2">
-                {rule.is_active ? <Power className="w-5 h-5 text-green-600" /> : <PowerOff className="w-5 h-5" />}
+              <button
+                onClick={() => handleToggle(rule)}
+                className={`btn text-xs gap-1.5 ${rule.is_active ? "btn-secondary" : "btn-primary"}`}
+                title={rule.is_active ? "Deactivate" : "Activate"}
+              >
+                {rule.is_active ? (
+                  <><ToggleRight className="w-4 h-4 text-green-600" /> Active</>
+                ) : (
+                  <><ToggleLeft className="w-4 h-4" /> Inactive</>
+                )}
               </button>
             </div>
           ))}
@@ -140,7 +148,7 @@ function CreateRuleModal({ units, campaigns, users, onClose, onSaved }: {
         method,
         assigned_user_ids: Array.from(selectedUsers),
         is_active: true,
-      } as any);
+      });
       onSaved();
     } catch (err) { console.error(err); }
     finally { setIsSaving(false); }
@@ -182,7 +190,7 @@ function CreateRuleModal({ units, campaigns, users, onClose, onSaved }: {
               Assign to ({selectedUsers.size} selected)
             </label>
             <div className="border border-gray-200 rounded-lg max-h-40 overflow-y-auto p-1">
-              {users.map((u) => (
+              {users.filter((u) => ["Sales Agent", "Concierge Agent", "Credit Health Agent"].includes(u.role)).map((u) => (
                 <label key={u.id} className="flex items-center gap-2 px-2 py-1.5 rounded hover:bg-gray-50 cursor-pointer">
                   <input type="checkbox" checked={selectedUsers.has(u.id)} onChange={() => toggleUser(u.id)} className="rounded border-gray-300" />
                   <span className="text-sm text-gray-700">{u.name}</span>

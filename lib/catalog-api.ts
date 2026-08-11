@@ -25,6 +25,8 @@ export interface Product {
   sort_order: number;
 }
 
+export type ReportDateRange = "all" | "7d" | "30d" | "90d" | "mtd" | "ytd" | "since_last_sent";
+
 export interface ReportMailing {
   id: string;
   name: string;
@@ -35,6 +37,7 @@ export interface ReportMailing {
   day_of_week?: number;
   day_of_month?: number;
   send_hour: number;
+  date_range: ReportDateRange;
   active: boolean;
   last_sent_at?: string;
   created_by?: string;
@@ -183,3 +186,13 @@ export const REPORT_TYPES = [
 ] as const;
 
 export type ReportTypeValue = typeof REPORT_TYPES[number]["value"];
+
+export const DATE_RANGE_OPTIONS: { value: ReportDateRange; label: string }[] = [
+  { value: "all",             label: "All data (no date filter)" },
+  { value: "since_last_sent", label: "Since last send" },
+  { value: "7d",               label: "Last 7 days" },
+  { value: "30d",              label: "Last 30 days" },
+  { value: "90d",              label: "Last 90 days" },
+  { value: "mtd",              label: "Month to date" },
+  { value: "ytd",              label: "Year to date" },
+];

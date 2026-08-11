@@ -63,7 +63,7 @@ export default function LostReasonModal({
         </div>
 
         <p className="text-sm text-gray-500 mb-4">
-          Please provide a reason for marking "{leadName}" as lost.
+          Please provide a reason for marking &quot;{leadName}&quot; as lost.
         </p>
 
         <div className="space-y-3">

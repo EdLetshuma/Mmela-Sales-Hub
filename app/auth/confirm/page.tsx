@@ -1,6 +1,7 @@
 "use client";
 
 import React, { Suspense, useEffect, useState } from "react";
+import Link from "next/link";
 import { supabase } from "@/lib/supabase";
 import { useRouter, useSearchParams } from "next/navigation";
 
@@ -69,7 +70,7 @@ function AuthConfirmContent() {
             <div style={{ width: 48, height: 48, background: "#FCEBEB", borderRadius: "50%", display: "flex", alignItems: "center", justifyContent: "center", margin: "0 auto 16px", fontSize: 22 }}>✕</div>
             <p style={{ fontSize: 15, fontWeight: 600, color: "#111827", margin: "0 0 8px" }}>Link expired</p>
             <p style={{ fontSize: 13, color: "#6B7280", margin: "0 0 20px" }}>{message}</p>
-            <a href="/login" style={{ display: "inline-block", background: "#1A348C", color: "#fff", textDecoration: "none", fontSize: 13, fontWeight: 600, padding: "10px 24px", borderRadius: 6 }}>Back to sign in</a>
+            <Link href="/login" style={{ display: "inline-block", background: "#1A348C", color: "#fff", textDecoration: "none", fontSize: 13, fontWeight: 600, padding: "10px 24px", borderRadius: 6 }}>Back to sign in</Link>
           </>
         )}
       </div>

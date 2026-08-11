@@ -25,7 +25,7 @@ export default function LeadPool({ segment }: LeadPoolProps) {
         getSalesUsers(),
       ]);
       setLeads(l);
-      setUsers(u.filter((u) => ["Sales Agent", "Team Leader"].includes(u.role)));
+      setUsers(u.filter((u) => u.role === "Sales Agent"));
     } finally {
       setLoading(false);
     }

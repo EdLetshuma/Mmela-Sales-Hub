@@ -3,7 +3,7 @@
 import React, { useState, useCallback, useRef } from "react";
 import { supabase } from "@/lib/supabase";
 import { useAuth } from "@/components/providers/AuthProvider";
-import { checkDuplicateLeads } from "@/lib/sales-api";
+import { checkDuplicateLeads, checkDuplicateClients } from "@/lib/sales-api";
 import { normaliseContact } from "@/lib/normalise";
 import { Upload, ChevronRight, ChevronLeft, Check, X, AlertCircle, Download } from "lucide-react";
 
@@ -26,6 +26,8 @@ interface MappedRow {
   raw: ImportRow;
   error?: string;
   duplicate?: boolean;
+  client_match_id?: string;
+  client_match_name?: string;
 }
 
 interface BusinessUnit { id: string; name: string; slug: string; }
@@ -73,7 +75,7 @@ async function parseXLSX(buffer: ArrayBuffer): Promise<{ headers: string[]; rows
       document.head.appendChild(s);
     });
   }
-  const XLSX = (window as unknown as { XLSX: { read: Function; utils: { sheet_to_json: Function } } }).XLSX;
+  const XLSX = (window as unknown as { XLSX: { read: (buf: ArrayBuffer, opts: { type: string }) => { Sheets: Record<string, unknown>; SheetNames: string[] }; utils: { sheet_to_json: (ws: unknown, opts: { header: number; defval: string }) => string[][] } } }).XLSX;
   const wb = XLSX.read(buffer, { type: "array" });
   const ws = wb.Sheets[wb.SheetNames[0]];
   const data: string[][] = XLSX.utils.sheet_to_json(ws, { header: 1, defval: "" });
@@ -183,13 +185,21 @@ export default function LeadImportWizard({ onBack, onDone }: { onBack: () => voi
     // Batch DB duplicate check — check each unique phone/email against the DB
     const checked = await Promise.all(rows.map(async (row) => {
       if (row.error) return row; // Already has a validation error
-      const dupes = await checkDuplicateLeads(row.phone, row.email);
+      const [dupes, clientDupes] = await Promise.all([
+        checkDuplicateLeads(row.phone, row.email),
+        checkDuplicateClients(row.phone, row.email, row.id_number),
+      ]);
       if (dupes.length > 0) {
         return {
           ...row,
           duplicate: true,
           error: `Already exists — ${dupes[0].name} (${dupes[0].status}${dupes[0].assigned_to ? `, ${dupes[0].assigned_to}` : ""})`,
         };
+      }
+      // A match against an existing client isn't a duplicate to skip — it's a
+      // returning client, so the new lead gets linked to their record instead.
+      if (clientDupes.length > 0) {
+        return { ...row, client_match_id: clientDupes[0].id, client_match_name: clientDupes[0].name };
       }
       return row;
     }));
@@ -225,6 +235,7 @@ export default function LeadImportWizard({ onBack, onDone }: { onBack: () => voi
         business_unit_id: selectedUnit || null,
         campaign_id: selectedCampaign || null,
         assigned_to_user_id: null,
+        client_id: row.client_match_id || null,
         // Store full raw row as captured_data so nothing is lost
         captured_data: Object.keys(row.raw).length > 0 ? row.raw : null,
       });
@@ -253,7 +264,7 @@ export default function LeadImportWizard({ onBack, onDone }: { onBack: () => voi
                 </button>
                 <h2 className="text-base font-semibold text-gray-900">Import leads</h2>
               </div>
-              <p className="text-xs text-gray-400 ml-7">Import from CSV or Excel. We'll map your columns, validate and preview before anything is saved.</p>
+              <p className="text-xs text-gray-400 ml-7">Import from CSV or Excel. We&apos;ll map your columns, validate and preview before anything is saved.</p>
             </div>
           </div>
 
@@ -374,7 +385,7 @@ export default function LeadImportWizard({ onBack, onDone }: { onBack: () => voi
           {step === 1 && (
             <div className="space-y-4">
               <div className="p-3 rounded-lg text-xs" style={{ background: "#EEF4FD", color: "#1A348C" }}>
-                We detected <strong>{headers.length} columns</strong> and <strong>{rawRows.length} rows</strong>. Map each column to a lead field below. Columns marked "Skip" won't be imported.
+                We detected <strong>{headers.length} columns</strong> and <strong>{rawRows.length} rows</strong>. Map each column to a lead field below. Columns marked &quot;Skip&quot; won&apos;t be imported.
               </div>
               <div className="space-y-2">
                 {headers.map(h => (
@@ -400,7 +411,7 @@ export default function LeadImportWizard({ onBack, onDone }: { onBack: () => voi
               {!Object.values(mapping).includes("name") && (
                 <div className="p-3 rounded-lg flex items-center gap-2 text-xs" style={{ background: "#FCEBEB", color: "#791F1F" }}>
                   <AlertCircle className="w-4 h-4 flex-shrink-0" />
-                  You must map at least one column to "Full name" before continuing.
+                  You must map at least one column to &quot;Full name&quot; before continuing.
                 </div>
               )}
             </div>
@@ -448,7 +459,7 @@ export default function LeadImportWizard({ onBack, onDone }: { onBack: () => voi
                       <table className="w-full text-xs border-collapse">
                         <thead>
                           <tr className="bg-gray-50 border-b border-gray-200">
-                            {["Name","Email","Phone","Segment","Source"].map(h => (
+                            {["Name","Email","Phone","Segment","Source","Link"].map(h => (
                               <th key={h} className="px-3 py-2 text-left font-medium text-gray-500">{h}</th>
                             ))}
                           </tr>
@@ -461,6 +472,13 @@ export default function LeadImportWizard({ onBack, onDone }: { onBack: () => voi
                               <td className="px-3 py-2 text-gray-500">{row.phone || "—"}</td>
                               <td className="px-3 py-2 text-gray-500">{row.segment || segment}</td>
                               <td className="px-3 py-2 text-gray-500">{row.source || source}</td>
+                              <td className="px-3 py-2">
+                                {row.client_match_id ? (
+                                  <span className="badge" style={{ background: "#EEF4FD", color: "#1A348C" }} title={`Will be linked to existing client: ${row.client_match_name}`}>
+                                    Existing client
+                                  </span>
+                                ) : "—"}
+                              </td>
                             </tr>
                           ))}
                         </tbody>

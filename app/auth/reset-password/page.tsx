@@ -1,6 +1,7 @@
 "use client";
 
 import React, { useState } from "react";
+import Link from "next/link";
 import { updatePassword } from "@/lib/auth";
 import { Eye, EyeOff, Check, ShieldCheck } from "lucide-react";
 
@@ -65,9 +66,9 @@ export default function ResetPasswordPage() {
               Your password has been changed. You can now sign in with your new
               password.
             </p>
-            <a href="/" className="btn btn-primary w-full inline-flex">
+            <Link href="/" className="btn btn-primary w-full inline-flex">
               Go to sign in
-            </a>
+            </Link>
           </div>
         </div>
       </div>

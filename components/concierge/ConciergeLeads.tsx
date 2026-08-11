@@ -72,9 +72,7 @@ function LeadModal({ lead, onClose, onSave, users }: LeadModalProps) {
     }
   }
 
-  const conciergeUsers = users.filter((u) =>
-    ["Concierge Agent", "Admin", "Manager"].includes(u.role)
-  );
+  const conciergeUsers = users.filter((u) => u.role === "Concierge Agent");
 
   return (
     <div style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.45)", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 50, padding: 16 }} onClick={onClose}>

@@ -2,7 +2,7 @@
 
 import React, { useEffect, useState } from "react";
 import { ArrowLeft, Plus, UserCheck } from "lucide-react";
-import { getLead, updateLead, convertLeadToClient, getSalesUsers, assignLead, type SalesLead, type SalesUser } from "@/lib/sales-api";
+import { getLead, updateLead, convertLeadToClient, getSalesUsers, assignLead, getClient, type SalesLead, type SalesUser } from "@/lib/sales-api";
 import { getSystemSettings, type SystemSettings } from "@/lib/settings-api";
 import QuoteModal, { type SavedQuote, type QuoteFormData } from "@/components/sales/QuoteModal";
 import AcceptQuoteModal from "@/components/sales/AcceptQuoteModal";
@@ -27,13 +27,16 @@ const STATUS_RANK: Record<string, number> = {
 // Which transitions are allowed from each status
 // Rules:
 //   - Can always move forward in the pipeline
-//   - Can always mark Lost from any status
-//   - If Lost, can only re-open to Contacted (re-engage)
+//   - Can always mark Lost before Won
+//   - Won is terminal — a client isn't "lost"; cancel the relevant
+//     policy instead (from the client's Policies list) with a reason
+//   - Lost is terminal — re-engaging a lost lead happens through the
+//     recycled-leads pool (Outreach/Campaigns), not by reopening it here
 //   - Cannot go back to Prospect once Quoted or Won
 //   - Cannot go to Won without at least one accepted quote
 function getAllowedTransitions(current: string, hasAcceptedQuote: boolean): string[] {
-  if (current === "Won") return ["Lost"];          // Won is terminal except for loss
-  if (current === "Lost") return ["Contacted"];    // Can only re-engage, not restart
+  if (current === "Won") return [];                // Won is terminal
+  if (current === "Lost") return [];                // Lost is terminal
   const currentRank = STATUS_RANK[current] ?? 0;
   return STATUSES.filter(s => {
     if (s === current) return false;               // Already this status
@@ -49,6 +52,8 @@ function getStatusTooltip(target: string, current: string, hasAcceptedQuote: boo
   if (target === "Won" && !hasAcceptedQuote) return "Requires an accepted quote first";
   if (target === "Prospect" && STATUS_RANK[current] >= 2) return "Cannot return to Prospect once Quoted";
   if (target === "Contacted" && current === "Won") return "Cannot return to Contacted from Won";
+  if (target === "Lost" && current === "Won") return "A client can't be marked Lost — cancel the relevant policy instead";
+  if (current === "Lost") return "Lost is final — re-engage via the recycled leads pool under Outreach";
   return "";
 }
 
@@ -64,6 +69,22 @@ function extractFromNotes(notes: string | undefined, key: string): string | unde
   if (!notes) return undefined;
   const match = notes.match(new RegExp(`${key}:\\s*(.*)`, "i"));
   return match ? match[1].trim() : undefined;
+}
+
+// Import boilerplate that isn't meaningful as a displayed note —
+// section headers and fields already shown elsewhere on the page
+// (e.g. "Title: Mr"). Fields like VIN number or free-text comments
+// are kept since they carry real information.
+const NOTE_BOILERPLATE_LINE = /^-{2,}.*-{2,}$/;
+const NOTE_BOILERPLATE_KEYS = /^(title|id number|date of birth|product interest):\s*/i;
+
+function cleanNotes(notes: string | undefined | null): string {
+  if (!notes) return "";
+  return notes
+    .split("\n")
+    .map((line) => line.trim())
+    .filter((line) => line && !NOTE_BOILERPLATE_LINE.test(line) && !NOTE_BOILERPLATE_KEYS.test(line))
+    .join("\n");
 }
 
 function FieldRow({ label, value }: { label: string; value?: string | null }) {
@@ -96,6 +117,7 @@ export default function LeadDetail({ leadId, onBack, onNavigate }: LeadDetailPro
   const [settings, setSettings] = useState<SystemSettings | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [convertedAt, setConvertedAt] = useState<string | null>(null);
 
   // Segment awareness
   const { user } = useAuth();
@@ -123,7 +145,12 @@ export default function LeadDetail({ leadId, onBack, onNavigate }: LeadDetailPro
   useEffect(() => {
     setLoading(true);
     Promise.all([getLead(leadId), getSalesUsers(), getSystemSettings()])
-      .then(([l, u, s]) => { setLead(l); setUsers(u); setSettings(s); })
+      .then(([l, u, s]) => {
+        setLead(l); setUsers(u); setSettings(s);
+        if (l?.client_id) {
+          getClient(l.client_id).then((c) => setConvertedAt(c?.join_date ?? null));
+        }
+      })
       .catch(() => setError("Failed to load lead."))
       .finally(() => setLoading(false));
   }, [leadId]);
@@ -262,6 +289,7 @@ export default function LeadDetail({ leadId, onBack, onNavigate }: LeadDetailPro
   const isConverted = !!lead.client_id;
   const canConvert = lead.status === "Won" && !isConverted;
   const schemeDetails = lead.scheme_details as Record<string, string> | null;
+  const displayNotes = cleanNotes(lead.notes);
 
   return (
     <div className="space-y-4">
@@ -282,6 +310,10 @@ export default function LeadDetail({ leadId, onBack, onNavigate }: LeadDetailPro
               <h1 className="text-lg font-semibold text-gray-900 leading-tight">{lead.name}</h1>
               {displayEmail && <p className="text-sm text-gray-500 mt-0.5">{displayEmail}</p>}
               {lead.phone && <p className="text-sm text-gray-500">{lead.phone}</p>}
+              <p className="text-xs text-gray-400 mt-1">
+                Added {lead.created_at ? new Date(lead.created_at).toLocaleDateString("en-ZA", { day: "numeric", month: "short", year: "numeric" }) : "—"}
+                {convertedAt && ` · Converted ${new Date(convertedAt).toLocaleDateString("en-ZA", { day: "numeric", month: "short", year: "numeric" })}`}
+              </p>
             </div>
           </div>
           <div className="flex items-center gap-2 flex-wrap justify-end">
@@ -292,9 +324,9 @@ export default function LeadDetail({ leadId, onBack, onNavigate }: LeadDetailPro
                 </span>
                 <button
                   className="btn btn-secondary text-xs"
-                  onClick={() => onNavigate(`/sales/clients?id=${lead.client_id}`)}
+                  onClick={() => onNavigate(`/sales/clients/${lead.client_id}`)}
                 >
-                  View client profile →
+                  View client profile
                 </button>
               </>
             )}
@@ -330,16 +362,6 @@ export default function LeadDetail({ leadId, onBack, onNavigate }: LeadDetailPro
         <div className="mt-4 pt-4" style={{ borderTop: "1px solid #F1F3F5" }}>
           <div className="flex items-center gap-2 mb-2">
             <span className="text-xs text-gray-400">Change status</span>
-            {lead.status === "Won" && (
-              <span className="text-[10px] px-2 py-0.5 rounded-full font-medium" style={{ background: "#EAF3DE", color: "#27500A" }}>
-                Won — only loss is possible from here
-              </span>
-            )}
-            {lead.status === "Lost" && (
-              <span className="text-[10px] px-2 py-0.5 rounded-full font-medium" style={{ background: "#FCEBEB", color: "#791F1F" }}>
-                Lost — can re-engage to Contacted
-              </span>
-            )}
           </div>
           <div className="flex gap-1.5 flex-wrap">
             {STATUSES.map((s) => {
@@ -609,6 +631,16 @@ export default function LeadDetail({ leadId, onBack, onNavigate }: LeadDetailPro
                       )}
 
                       {/* Actions */}
+                      {quote.status === "Accepted" && isConverted && (
+                        <div className="flex mt-3 pt-3" style={{ borderTop: "1px solid #F1F3F5" }}>
+                          <button
+                            className="btn btn-secondary text-xs"
+                            onClick={() => onNavigate(`/sales/clients/${lead.client_id}`)}
+                          >
+                            View policy
+                          </button>
+                        </div>
+                      )}
                       {quote.status === "Pending" && !isTerminal && (
                         <div className="flex gap-2 mt-3 pt-3" style={{ borderTop: "1px solid #F1F3F5" }}>
                           <button
@@ -655,25 +687,27 @@ export default function LeadDetail({ leadId, onBack, onNavigate }: LeadDetailPro
             ) : (
               <p className="text-xs text-gray-400 mb-3">Unassigned</p>
             )}
-            <select
-              className="input-field text-xs"
-              defaultValue=""
-              onChange={(e) => { if (e.target.value) handleAssign(e.target.value); }}
-            >
-              <option value="">Reassign…</option>
-              {users
-                .filter((u) => ["Sales Agent", "Team Leader", "Manager"].includes(u.role))
-                .map((u) => (
-                  <option key={u.id} value={u.id}>{u.name}</option>
-                ))}
-            </select>
+            {!isConverted && lead.status !== "Lost" && (
+              <select
+                className="input-field text-xs"
+                defaultValue=""
+                onChange={(e) => { if (e.target.value) handleAssign(e.target.value); }}
+              >
+                <option value="">Reassign…</option>
+                {users
+                  .filter((u) => u.role === "Sales Agent")
+                  .map((u) => (
+                    <option key={u.id} value={u.id}>{u.name}</option>
+                  ))}
+              </select>
+            )}
           </div>
 
           {/* Notes */}
-          {lead.notes && !editing && (
+          {displayNotes && !editing && (
             <div className="card">
               <h2 className="text-sm font-semibold text-gray-900 mb-2">Notes</h2>
-              <p className="text-sm text-gray-700 whitespace-pre-wrap leading-relaxed">{lead.notes}</p>
+              <p className="text-sm text-gray-700 whitespace-pre-wrap leading-relaxed">{displayNotes}</p>
             </div>
           )}
         </div>

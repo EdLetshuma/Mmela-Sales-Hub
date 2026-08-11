@@ -1,6 +1,6 @@
 import { supabase } from "./supabase";
 import type { User } from "@/types";
-import { UserStatus } from "@/types";
+import { Permission, UserRole, UserStatus } from "@/types";
 
 export async function signIn(email: string, password: string) {
   const { data, error } = await supabase.auth.signInWithPassword({
@@ -36,6 +36,36 @@ export async function getSession() {
   return session;
 }
 
+// Computes the effective permission set for a user: role defaults from
+// `role_permissions`, with any per-user rows in `user_permission_overrides`
+// taking priority. Admin always has every permission. This is the single
+// source of truth used to gate actions across the app (e.g. editing a
+// policy vs. only viewing it) — it does not rely on the `users.permissions`
+// column, which nothing else writes to.
+async function getEffectivePermissions(role: string, userId: string): Promise<Permission[]> {
+  if (role === UserRole.Admin) {
+    return Object.values(Permission);
+  }
+
+  const [roleRes, overrideRes] = await Promise.all([
+    supabase.from("role_permissions").select("permission, granted").eq("role", role),
+    supabase.from("user_permission_overrides").select("permission, granted").eq("user_id", userId),
+  ]);
+
+  const granted = new Set<string>(
+    (roleRes.data ?? []).filter((r) => r.granted).map((r) => r.permission)
+  );
+
+  (overrideRes.data ?? []).forEach((o) => {
+    if (o.granted) granted.add(o.permission);
+    else granted.delete(o.permission);
+  });
+
+  return Array.from(granted).filter((p): p is Permission =>
+    (Object.values(Permission) as string[]).includes(p)
+  );
+}
+
 export async function getUserProfile(userId: string): Promise<User | null> {
   const { data, error } = await supabase
     .from("users")
@@ -48,7 +78,8 @@ export async function getUserProfile(userId: string): Promise<User | null> {
     return null;
   }
 
-  return data as User;
+  const permissions = await getEffectivePermissions(data.role, userId);
+  return { ...data, permissions } as User;
 }
 
 export async function sendPasswordReset(email: string) {

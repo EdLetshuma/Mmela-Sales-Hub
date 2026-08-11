@@ -1,7 +1,7 @@
 "use client";
 
 import React, { useEffect, useState } from "react";
-import { getPolicies, getLeads, getSalesUsers, type SalesPolicy, type SalesUser } from "@/lib/sales-api";
+import { getPolicies, getLeads, getSalesUsers, type SalesLead, type SalesPolicy, type SalesUser } from "@/lib/sales-api";
 import type { ClientSegment } from "@/types";
 import { Download } from "lucide-react";
 
@@ -32,7 +32,7 @@ function downloadCSV(filename: string, rows: string[][], headers: string[]) {
 export default function SalesReporting({ segment }: SalesReportingProps) {
   const [reportType, setReportType] = useState<ReportType>("policies");
   const [policies, setPolicies] = useState<SalesPolicy[]>([]);
-  const [leads, setLeads] = useState<any[]>([]);
+  const [leads, setLeads] = useState<SalesLead[]>([]);
   const [users, setUsers] = useState<SalesUser[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);

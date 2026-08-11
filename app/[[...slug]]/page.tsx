@@ -26,6 +26,15 @@ export default function Home() {
     if (!user) setPrevUser(null);
   }, [user]);
 
+  // Logging out (manually or via inactivity timeout) shows the login form,
+  // but the URL bar is left showing wherever the session happened to be —
+  // clean it up so a signed-out visitor doesn't see internal route names.
+  useEffect(() => {
+    if (!isLoading && !user && window.location.pathname !== "/") {
+      window.history.replaceState(null, "", "/");
+    }
+  }, [isLoading, user]);
+
   if (isLoading) {
     return (
       <div style={{ minHeight: "100vh", background: "#1A348C", display: "flex", alignItems: "center", justifyContent: "center" }}>

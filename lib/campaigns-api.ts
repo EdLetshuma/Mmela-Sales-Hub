@@ -1,5 +1,6 @@
 import { supabase } from "./supabase";
 import { normaliseContact } from "./normalise";
+import { getSystemSettings } from "./settings-api";
 import type {
   Campaign,
   Form,
@@ -7,6 +8,7 @@ import type {
   Lead,
   BusinessUnit,
   RoutingRule,
+  ReferenceListKey,
 } from "@/types";
 
 // ============================================================
@@ -86,7 +88,7 @@ export async function deleteCampaign(id: string): Promise<void> {
 // FORMS
 // ============================================================
 
-export async function getForms(campaignId?: string): Promise<Form[]> {
+export async function getForms(campaignId?: string, includeArchived = false): Promise<Form[]> {
   let query = supabase
     .from("forms")
     .select("*, campaigns(name, business_unit_id)")
@@ -94,6 +96,9 @@ export async function getForms(campaignId?: string): Promise<Form[]> {
 
   if (campaignId) {
     query = query.eq("campaign_id", campaignId);
+  }
+  if (!includeArchived) {
+    query = query.is("archived_at", null);
   }
 
   const { data, error } = await query;
@@ -150,6 +155,39 @@ export async function updateForm(
 
   if (error) throw error;
   return data;
+}
+
+export async function deleteForm(id: string): Promise<void> {
+  const { error } = await supabase.from("forms").delete().eq("id", id);
+  if (error) {
+    // FK on leads.form_id has no cascade — the DB itself refuses to delete
+    // a form that leads were captured through, so a printed QR code that
+    // already generated leads can't silently orphan them. archiveForm()
+    // is the fallback: it disables the link and hides the form from the
+    // list without touching the leads it already produced.
+    if (error.code === "23503") {
+      throw new Error("This form has captured leads and can't be permanently deleted. Archive it instead — its link stops working and it disappears from this list, but the leads stay intact.");
+    }
+    throw error;
+  }
+}
+
+// Soft-delete: disables the public link and hides the form from the
+// default list, but keeps the row (and any leads pointing at it) intact.
+export async function archiveForm(id: string): Promise<void> {
+  const { error } = await supabase
+    .from("forms")
+    .update({ is_active: false, archived_at: new Date().toISOString() })
+    .eq("id", id);
+  if (error) throw error;
+}
+
+export async function unarchiveForm(id: string): Promise<void> {
+  const { error } = await supabase
+    .from("forms")
+    .update({ archived_at: null })
+    .eq("id", id);
+  if (error) throw error;
 }
 
 // ============================================================
@@ -239,6 +277,70 @@ export async function submitPublicLead(leadData: {
 
   if (error) throw error;
   return data;
+}
+
+// Cross-device draft resume — a draft is only reachable by its random
+// token (like a shareable "resume later" link), via SECURITY DEFINER
+// RPCs; the underlying table has no direct anon access at all.
+export async function saveFormDraftRemote(token: string, formId: string, data: Record<string, unknown>): Promise<void> {
+  const { error } = await supabase.rpc("save_form_draft", { p_token: token, p_form_id: formId, p_data: data });
+  if (error) throw error;
+}
+
+export async function getFormDraftRemote(token: string): Promise<Record<string, unknown> | null> {
+  const { data, error } = await supabase.rpc("get_form_draft", { p_token: token });
+  if (error) throw error;
+  return data?.[0]?.data ?? null;
+}
+
+// Uploads a file/image/camera-capture/signature attachment from a public
+// form submission to the form_uploads bucket and returns its public URL.
+export async function uploadFormFile(formId: string, file: File): Promise<string> {
+  const ext = file.name.split(".").pop() || "bin";
+  const path = `${formId}/${Date.now()}-${Math.random().toString(36).slice(2)}.${ext}`;
+  const { error } = await supabase.storage.from("form_uploads").upload(path, file);
+  if (error) throw error;
+  const { data } = supabase.storage.from("form_uploads").getPublicUrl(path);
+  return data.publicUrl;
+}
+
+// Reference data sources for dropdown fields — an explicit allowlist of
+// safe, read-only lookups. Deliberately not a free-form table/SQL/API
+// data source: this is fetched by an unauthenticated public form, so an
+// open-ended query there would be a real injection/data-exposure risk.
+const STATIC_REFERENCE_LISTS: Partial<Record<ReferenceListKey, string[]>> = {
+  sa_provinces: ["Eastern Cape", "Free State", "Gauteng", "KwaZulu-Natal", "Limpopo", "Mpumalanga", "North West", "Northern Cape", "Western Cape"],
+  titles: ["Mr", "Mrs", "Miss", "Ms", "Dr", "Prof"],
+  marital_status: ["Single", "Married", "Divorced", "Widowed"],
+  yes_no: ["Yes", "No"],
+};
+
+export async function getReferenceListOptions(key: ReferenceListKey): Promise<string[]> {
+  const staticList = STATIC_REFERENCE_LISTS[key];
+  if (staticList) return staticList;
+  if (key === "business_units") {
+    const units = await getBusinessUnits();
+    return units.map((u) => u.name);
+  }
+  if (key === "insurers") {
+    const settings = await getSystemSettings();
+    return settings.underwriters;
+  }
+  if (key === "product_catalog") {
+    const settings = await getSystemSettings();
+    return Object.values(settings.productCatalog).flat();
+  }
+  const roleByKey: Partial<Record<ReferenceListKey, string>> = {
+    sales_agents: "Sales Agent",
+    concierge_agents: "Concierge Agent",
+    credit_health_agents: "Credit Health Agent",
+  };
+  if (key in roleByKey) {
+    const { data, error } = await supabase.rpc("get_active_staff_names", { p_role: roleByKey[key] });
+    if (error) { console.error("Failed to load staff reference list:", error); return []; }
+    return (data ?? []).map((row: { name: string }) => row.name);
+  }
+  return [];
 }
 
 export async function assignLead(

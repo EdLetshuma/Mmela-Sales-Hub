@@ -3,12 +3,14 @@
 import React, { useEffect, useState } from "react";
 import { useAuth } from "@/components/providers/AuthProvider";
 import {
+  getMyDashboardStats,
   getDashboardStats,
   getLeads,
   type SalesDashboardStats,
   type SalesLead,
 } from "@/lib/sales-api";
 import type { ClientSegment } from "@/types";
+import { UserRole } from "@/types";
 import { Users, FileText, TrendingUp, ArrowRight } from "lucide-react";
 
 interface SalesDashboardProps {
@@ -60,6 +62,13 @@ export default function SalesDashboard({
   const { user } = useAuth();
   const firstName = user?.name?.split(" ")[0] || "there";
 
+  // "My X" personal quota view is for people who actually carry a sales
+  // quota (Sales Agent). Everyone else landing on this dashboard (Admin,
+  // Manager, Team Leader, Lead Admin, Call Centre Supervisor, ...) isn't
+  // personally assigned leads day-to-day, so a "my leads" view would just
+  // look empty to them — they see the whole business unit's data instead.
+  const isPersonalView = user?.role === UserRole.SalesAgent;
+
   const [stats, setStats] = useState<SalesDashboardStats | null>(null);
   const [recentLeads, setRecentLeads] = useState<SalesLead[]>([]);
   const [loading, setLoading] = useState(true);
@@ -69,26 +78,24 @@ export default function SalesDashboard({
     setLoading(true);
     setError(null);
 
+    if (!user?.id) return;
+
     Promise.all([
-      getDashboardStats(segment),
-      getLeads({ segment, assigned: "mine", userId: user?.id }),
+      isPersonalView ? getMyDashboardStats(user.id, segment) : getDashboardStats(segment),
+      isPersonalView
+        ? getLeads({ segment, assigned: "mine", userId: user.id })
+        : getLeads({ segment }),
     ])
       .then(([statsData, leads]) => {
         setStats(statsData);
-        // Show up to 5 most recent leads assigned to this user,
-        // falling back to any recent leads if none assigned
-        setRecentLeads(
-          leads.length > 0
-            ? leads.slice(0, 5)
-            : []
-        );
+        setRecentLeads(leads.slice(0, 5));
       })
       .catch((err) => {
         console.error(err);
         setError("Failed to load dashboard data.");
       })
       .finally(() => setLoading(false));
-  }, [segment, user?.id]);
+  }, [segment, user?.id, isPersonalView]);
 
   if (loading) {
     return (
@@ -135,19 +142,26 @@ export default function SalesDashboard({
   return (
     <div className="space-y-6">
       {/* Header */}
-      <div>
-        <h1 className="text-xl font-semibold text-gray-900">
-          Welcome back, {firstName}
-        </h1>
-        <p className="text-sm text-gray-500 mt-1">
-          {segment} sales overview
+      <div className="card" style={{ background: "linear-gradient(135deg, #0F1E4D 0%, #1A348C 100%)" }}>
+        <p className="text-xs font-medium mb-2" style={{ color: "rgba(204,224,245,.7)" }}>
+          {new Date().toLocaleDateString("en-ZA", { weekday: "long", day: "numeric", month: "long", year: "numeric" })}
+        </p>
+        <h1 className="text-2xl font-bold text-white">Welcome back, {firstName}.</h1>
+        <p className="text-sm mt-2" style={{ color: "rgba(204,224,245,.85)" }}>
+          {stats
+            ? isPersonalView
+              ? <>You have <strong className="text-white">{stats.totalLeads} leads</strong> assigned to you
+                  {stats.leadsThisMonth > 0 ? <>, <strong className="text-white">{stats.leadsThisMonth}</strong> added this month</> : ""}.</>
+              : <>There {stats.totalLeads === 1 ? "is" : "are"} <strong className="text-white">{stats.totalLeads} leads</strong> in {segment} sales
+                  {stats.leadsThisMonth > 0 ? <>, <strong className="text-white">{stats.leadsThisMonth}</strong> added this month</> : ""}.</>
+            : `${segment} sales overview`}
         </p>
       </div>
 
       {/* KPI Cards */}
       <div className="grid grid-cols-4 gap-4">
         <div className="card">
-          <p className="text-xs font-medium text-gray-500 mb-1.5">Total leads</p>
+          <p className="text-xs font-medium text-gray-500 mb-1.5">{isPersonalView ? "My leads" : "Total leads"}</p>
           <p className="text-2xl font-semibold text-gray-900 tracking-tight">
             {stats?.totalLeads ?? "—"}
           </p>
@@ -159,14 +173,14 @@ export default function SalesDashboard({
         </div>
 
         <div className="card">
-          <p className="text-xs font-medium text-gray-500 mb-1.5">Active clients</p>
+          <p className="text-xs font-medium text-gray-500 mb-1.5">{isPersonalView ? "My clients" : "Total clients"}</p>
           <p className="text-2xl font-semibold text-gray-900 tracking-tight">
             {stats?.totalClients ?? "—"}
           </p>
         </div>
 
         <div className="card">
-          <p className="text-xs font-medium text-gray-500 mb-1.5">Active policies</p>
+          <p className="text-xs font-medium text-gray-500 mb-1.5">{isPersonalView ? "My active policies" : "Active policies"}</p>
           <p className="text-2xl font-semibold text-gray-900 tracking-tight">
             {stats?.activePolicies ?? "—"}
           </p>
@@ -178,14 +192,16 @@ export default function SalesDashboard({
         </div>
 
         <div className="card">
-          <p className="text-xs font-medium text-gray-500 mb-1.5">Conversion rate</p>
+          <p className="text-xs font-medium text-gray-500 mb-1.5">{isPersonalView ? "My conversion rate" : "Conversion rate"}</p>
           <p className="text-2xl font-semibold text-gray-900 tracking-tight">
             {stats ? `${stats.conversionRate}%` : "—"}
           </p>
-          {stats && stats.unassignedLeads > 0 && (
-            <p className="text-xs mt-1.5 font-medium text-amber-600">
-              {stats.unassignedLeads} unassigned
-            </p>
+          {isPersonalView ? (
+            <p className="text-xs mt-1.5 text-gray-400">Lead → closed engagement</p>
+          ) : stats && stats.unassignedLeads > 0 ? (
+            <p className="text-xs mt-1.5 font-medium text-amber-600">{stats.unassignedLeads} unassigned leads</p>
+          ) : (
+            <p className="text-xs mt-1.5 text-gray-400">Lead → closed engagement</p>
           )}
         </div>
       </div>
@@ -195,7 +211,7 @@ export default function SalesDashboard({
         {/* Recent leads */}
         <div className="col-span-3 card">
           <div className="flex items-center justify-between mb-4">
-            <h2 className="text-sm font-semibold text-gray-900">My recent leads</h2>
+            <h2 className="text-sm font-semibold text-gray-900">{isPersonalView ? "My recent leads" : "Recent leads"}</h2>
             <button
               className="btn btn-ghost text-xs text-brand-700 hover:text-brand-900"
               onClick={() => onNavigate("/sales/leads")}
@@ -207,13 +223,15 @@ export default function SalesDashboard({
 
           {recentLeads.length === 0 ? (
             <div className="py-8 text-center">
-              <p className="text-sm text-gray-400">No leads assigned to you yet.</p>
-              <button
-                className="btn btn-secondary mt-3 text-xs"
-                onClick={() => onNavigate("/sales/leads/pool")}
-              >
-                Browse lead pool
-              </button>
+              <p className="text-sm text-gray-400">{isPersonalView ? "No leads assigned to you yet." : "No leads yet."}</p>
+              {isPersonalView && (
+                <button
+                  className="btn btn-secondary mt-3 text-xs"
+                  onClick={() => onNavigate("/sales/leads/pool")}
+                >
+                  Browse lead pool
+                </button>
+              )}
             </div>
           ) : (
             <div className="divide-y divide-gray-100">
