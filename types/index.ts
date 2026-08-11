@@ -162,6 +162,7 @@ export interface Form {
   settings?: FormSettings;
   qr_code_url?: string;
   created_by_user_id?: string;
+  archived_at?: string | null;
   created_at: string;
   updated_at: string;
 }

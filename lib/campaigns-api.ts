@@ -88,7 +88,7 @@ export async function deleteCampaign(id: string): Promise<void> {
 // FORMS
 // ============================================================
 
-export async function getForms(campaignId?: string): Promise<Form[]> {
+export async function getForms(campaignId?: string, includeArchived = false): Promise<Form[]> {
   let query = supabase
     .from("forms")
     .select("*, campaigns(name, business_unit_id)")
@@ -96,6 +96,9 @@ export async function getForms(campaignId?: string): Promise<Form[]> {
 
   if (campaignId) {
     query = query.eq("campaign_id", campaignId);
+  }
+  if (!includeArchived) {
+    query = query.is("archived_at", null);
   }
 
   const { data, error } = await query;
@@ -159,12 +162,32 @@ export async function deleteForm(id: string): Promise<void> {
   if (error) {
     // FK on leads.form_id has no cascade — the DB itself refuses to delete
     // a form that leads were captured through, so a printed QR code that
-    // already generated leads can't silently orphan them.
+    // already generated leads can't silently orphan them. archiveForm()
+    // is the fallback: it disables the link and hides the form from the
+    // list without touching the leads it already produced.
     if (error.code === "23503") {
-      throw new Error("This form has captured leads and can't be deleted. Deactivate it instead so its link stops accepting new submissions.");
+      throw new Error("This form has captured leads and can't be permanently deleted. Archive it instead — its link stops working and it disappears from this list, but the leads stay intact.");
     }
     throw error;
   }
+}
+
+// Soft-delete: disables the public link and hides the form from the
+// default list, but keeps the row (and any leads pointing at it) intact.
+export async function archiveForm(id: string): Promise<void> {
+  const { error } = await supabase
+    .from("forms")
+    .update({ is_active: false, archived_at: new Date().toISOString() })
+    .eq("id", id);
+  if (error) throw error;
+}
+
+export async function unarchiveForm(id: string): Promise<void> {
+  const { error } = await supabase
+    .from("forms")
+    .update({ archived_at: null })
+    .eq("id", id);
+  if (error) throw error;
 }
 
 // ============================================================

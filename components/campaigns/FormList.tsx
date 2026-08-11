@@ -7,6 +7,8 @@ import {
   createForm,
   updateForm,
   deleteForm,
+  archiveForm,
+  unarchiveForm,
   getBusinessUnits,
 } from "@/lib/campaigns-api";
 import { useAuth } from "@/components/providers/AuthProvider";
@@ -25,6 +27,8 @@ import {
   Pencil,
   MoreHorizontal,
   Trash2,
+  Archive,
+  ArchiveRestore,
   X,
   Code2,
 } from "lucide-react";
@@ -47,6 +51,7 @@ export default function FormList({ onEditForm }: FormListProps) {
   const [activeMenu, setActiveMenu] = useState<string | null>(null);
   const [showQr, setShowQr] = useState<string | null>(null);
   const [embedForm, setEmbedForm] = useState<{ slug: string; name: string } | null>(null);
+  const [showArchived, setShowArchived] = useState(false);
 
   useEffect(() => {
     loadData();
@@ -56,7 +61,7 @@ export default function FormList({ onEditForm }: FormListProps) {
     setIsLoading(true);
     try {
       const [formData, campaignData, unitData] = await Promise.all([
-        getForms(),
+        getForms(undefined, true), // fetch archived too; toggle filters client-side
         getCampaigns(),
         getBusinessUnits(),
       ]);
@@ -70,9 +75,11 @@ export default function FormList({ onEditForm }: FormListProps) {
     }
   };
 
-  const filtered = forms.filter((f) =>
-    f.name.toLowerCase().includes(search.toLowerCase())
-  );
+  const archivedCount = forms.filter((f) => f.archived_at).length;
+
+  const filtered = forms
+    .filter((f) => showArchived || !f.archived_at)
+    .filter((f) => f.name.toLowerCase().includes(search.toLowerCase()));
 
   const handleCopyLink = async (slug: string) => {
     await navigator.clipboard.writeText(getFormUrl(slug));
@@ -90,6 +97,7 @@ export default function FormList({ onEditForm }: FormListProps) {
   };
 
   const canDelete = (user?.permissions ?? []).includes(Permission.DeleteForms);
+  const canManage = (user?.permissions ?? []).includes(Permission.ManageForms);
 
   const handleDelete = async (form: Form) => {
     if (!window.confirm(`Delete "${form.name}"? Any QR codes or links already out there will stop working. This can't be undone.`)) return;
@@ -97,7 +105,38 @@ export default function FormList({ onEditForm }: FormListProps) {
       await deleteForm(form.id);
       await loadData();
     } catch (err) {
-      alert(err instanceof Error ? err.message : "Failed to delete form.");
+      const message = err instanceof Error ? err.message : "Failed to delete form.";
+      // deleteForm() throws this specific message when leads.form_id blocks
+      // the delete — offer archiving as the fallback right there instead of
+      // making the user find the archive button themselves.
+      if (message.includes("Archive it instead")) {
+        if (window.confirm(`${message}\n\nArchive "${form.name}" now?`)) {
+          await handleArchive(form);
+        }
+      } else {
+        alert(message);
+      }
+    }
+  };
+
+  const handleArchive = async (form: Form) => {
+    if (!window.confirm(`Archive "${form.name}"? Its link stops accepting submissions and it disappears from this list. You can still find it via "Show archived" and restore it later.`)) return;
+    try {
+      await archiveForm(form.id);
+      await loadData();
+    } catch (err) {
+      console.error("Failed to archive form:", err);
+      alert("Failed to archive form.");
+    }
+  };
+
+  const handleUnarchive = async (form: Form) => {
+    try {
+      await unarchiveForm(form.id);
+      await loadData();
+    } catch (err) {
+      console.error("Failed to unarchive form:", err);
+      alert("Failed to unarchive form.");
     }
   };
 
@@ -122,15 +161,23 @@ export default function FormList({ onEditForm }: FormListProps) {
         </button>
       </div>
 
-      <div className="relative max-w-xs">
-        <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
-        <input
-          type="text"
-          placeholder="Search forms..."
-          value={search}
-          onChange={(e) => setSearch(e.target.value)}
-          className="input-field pl-9"
-        />
+      <div className="flex items-center gap-4">
+        <div className="relative max-w-xs flex-1">
+          <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
+          <input
+            type="text"
+            placeholder="Search forms..."
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+            className="input-field pl-9"
+          />
+        </div>
+        {archivedCount > 0 && (
+          <label className="flex items-center gap-1.5 text-xs text-gray-500 cursor-pointer flex-shrink-0">
+            <input type="checkbox" checked={showArchived} onChange={(e) => setShowArchived(e.target.checked)} />
+            Show archived ({archivedCount})
+          </label>
+        )}
       </div>
 
       {isLoading ? (
@@ -167,10 +214,12 @@ export default function FormList({ onEditForm }: FormListProps) {
             const unitId = form.campaigns?.business_unit_id;
             const unitName = unitId ? getUnitName(unitId) : "";
 
+            const isArchived = !!form.archived_at;
+
             return (
               <div
                 key={form.id}
-                className="card flex items-center gap-4 group"
+                className={`card flex items-center gap-4 group ${isArchived ? "opacity-60" : ""}`}
                 style={{ position: "relative", overflow: "visible" }}
               >
                 <div
@@ -188,15 +237,13 @@ export default function FormList({ onEditForm }: FormListProps) {
                     <h3 className="text-sm font-semibold text-gray-900 truncate">
                       {form.name}
                     </h3>
-                    <span
-                      className={`badge ${
-                        form.is_active
-                          ? "badge-contacted"
-                          : "bg-gray-100 text-gray-500"
-                      }`}
-                    >
-                      {form.is_active ? "Live" : "Inactive"}
-                    </span>
+                    {isArchived ? (
+                      <span className="badge bg-gray-100 text-gray-500">Archived</span>
+                    ) : (
+                      <span className={`badge ${form.is_active ? "badge-contacted" : "bg-gray-100 text-gray-500"}`}>
+                        {form.is_active ? "Live" : "Inactive"}
+                      </span>
+                    )}
                   </div>
                   <p className="text-xs text-gray-400 mt-0.5">
                     {campaignName}
@@ -208,6 +255,28 @@ export default function FormList({ onEditForm }: FormListProps) {
                   </p>
                 </div>
 
+                {isArchived ? (
+                  <div className="flex items-center gap-1.5 flex-shrink-0">
+                    {canManage && (
+                      <button
+                        onClick={() => handleUnarchive(form)}
+                        className="btn btn-secondary text-xs gap-1.5"
+                        title="Restore this form"
+                      >
+                        <ArchiveRestore className="w-3.5 h-3.5" /> Unarchive
+                      </button>
+                    )}
+                    {canDelete && (
+                      <button
+                        onClick={() => handleDelete(form)}
+                        className="btn btn-ghost p-1.5 text-red-400 hover:text-red-600"
+                        title="Delete form"
+                      >
+                        <Trash2 className="w-3.5 h-3.5" />
+                      </button>
+                    )}
+                  </div>
+                ) : (
                 <div className="flex items-center gap-1.5 flex-shrink-0">
                   <button
                     onClick={() => handleCopyLink(form.slug)}
@@ -259,6 +328,15 @@ export default function FormList({ onEditForm }: FormListProps) {
                       <><ToggleLeft className="w-4 h-4" /> Inactive</>
                     )}
                   </button>
+                  {canManage && (
+                    <button
+                      onClick={() => handleArchive(form)}
+                      className="btn btn-ghost p-1.5 text-gray-400 hover:text-gray-700"
+                      title="Archive form"
+                    >
+                      <Archive className="w-3.5 h-3.5" />
+                    </button>
+                  )}
                   {canDelete && (
                     <button
                       onClick={() => handleDelete(form)}
@@ -269,6 +347,7 @@ export default function FormList({ onEditForm }: FormListProps) {
                     </button>
                   )}
                 </div>
+                )}
 
                 {/* QR Code popup - outside flex row so it can overflow */}
                 {showQr === form.id && (
