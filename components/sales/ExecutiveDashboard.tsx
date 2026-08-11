@@ -7,7 +7,7 @@ import {
   AreaChart, Area, PieChart, Pie, Cell,
   XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer,
 } from "recharts";
-import { AlertTriangle, ArrowRight, ShieldCheck, Building2, Car, CreditCard } from "lucide-react";
+import { AlertTriangle, ArrowRight, ShieldCheck, Building2, Car, CreditCard, Loader2 } from "lucide-react";
 
 interface ExecutiveDashboardProps {
   onNavigate: (path: string) => void;
@@ -51,11 +51,11 @@ export default function ExecutiveDashboard({ onNavigate }: ExecutiveDashboardPro
 
   const [range, setRange] = useState<ExecutiveRange>("30d");
   const [data, setData] = useState<ExecutiveOverview | null>(null);
-  const [loading, setLoading] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
-    setLoading(true);
+    setRefreshing(true);
     setError(null);
     getExecutiveOverview(range)
       .then(setData)
@@ -63,10 +63,13 @@ export default function ExecutiveDashboard({ onNavigate }: ExecutiveDashboardPro
         console.error(err);
         setError("Failed to load the executive overview.");
       })
-      .finally(() => setLoading(false));
+      .finally(() => setRefreshing(false));
   }, [range]);
 
-  if (loading) {
+  // Only the very first load shows the full skeleton — changing the filter
+  // afterwards keeps the existing cards on screen (dimmed + a small spinner
+  // by the filter) instead of blanking the page and reloading everything.
+  if (!data && !error) {
     return (
       <div className="space-y-6">
         <div className="h-24 bg-gray-100 rounded-xl animate-pulse" />
@@ -98,7 +101,11 @@ export default function ExecutiveDashboard({ onNavigate }: ExecutiveDashboardPro
   ].filter((u) => u.value > 0);
 
   return (
-    <div className="space-y-6">
+    <div
+      className="space-y-6"
+      style={{ opacity: refreshing ? 0.6 : 1, transition: "opacity 150ms ease" }}
+      aria-busy={refreshing}
+    >
       {/* Header */}
       <div className="card" style={{ background: "linear-gradient(135deg, #0F1E4D 0%, #1A348C 100%)" }}>
         <div className="flex items-start justify-between gap-6">
@@ -130,12 +137,14 @@ export default function ExecutiveDashboard({ onNavigate }: ExecutiveDashboardPro
           className="input-field"
           style={{ width: "auto", fontSize: 13, padding: "6px 28px 6px 10px" }}
           value={range}
+          disabled={refreshing}
           onChange={(e) => setRange(e.target.value as ExecutiveRange)}
         >
           {RANGE_OPTIONS.map((r) => (
             <option key={r} value={r}>{EXECUTIVE_RANGE_LABELS[r]}</option>
           ))}
         </select>
+        {refreshing && <Loader2 className="w-3.5 h-3.5 text-gray-400 animate-spin" />}
       </div>
 
       {/* KPI row */}
