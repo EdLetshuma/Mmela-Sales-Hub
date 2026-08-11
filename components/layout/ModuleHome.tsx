@@ -20,6 +20,11 @@ import SalesDashboard from "@/components/sales/SalesDashboard";
 import ExecutiveDashboard from "@/components/sales/ExecutiveDashboard";
 import AnalyticsOverview from "@/components/executive/AnalyticsOverview";
 import DivisionPerformance from "@/components/executive/DivisionPerformance";
+import LeadOverview from "@/components/executive/leads/LeadOverview";
+import LeadFunnel from "@/components/executive/leads/LeadFunnel";
+import LeadSources from "@/components/executive/leads/LeadSources";
+import LeadAging from "@/components/executive/leads/LeadAging";
+import LostLeads from "@/components/executive/leads/LostLeads";
 import PolicyAdminDashboard from "@/components/sales/PolicyAdminDashboard";
 import SalesLeads from "@/components/sales/SalesLeads";
 import LeadDetail from "@/components/sales/LeadDetail";
@@ -70,6 +75,11 @@ export default function ModuleHome({ module, segment, activePath, onNavigate }: 
   if (module === "executive") {
     if (activePath === "/executive/analytics/divisions") return <DivisionPerformance />;
     if (activePath === "/executive/analytics") return <AnalyticsOverview />;
+    if (activePath === "/executive/leads/funnel") return <LeadFunnel />;
+    if (activePath === "/executive/leads/sources") return <LeadSources />;
+    if (activePath === "/executive/leads/aging") return <LeadAging />;
+    if (activePath === "/executive/leads/lost") return <LostLeads />;
+    if (activePath === "/executive/leads") return <LeadOverview />;
     return <ExecutiveDashboard onNavigate={onNavigate} />;
   }
 
