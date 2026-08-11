@@ -2,6 +2,7 @@
 
 import React, { useState } from "react";
 import { X, Copy, Check, Code2, Globe, Smartphone } from "lucide-react";
+import { getFormUrl } from "@/lib/site-url";
 
 interface EmbedSnippetModalProps {
   formName: string;
@@ -19,13 +20,7 @@ export default function EmbedSnippetModal({
   const [embedType, setEmbedType] = useState<EmbedType>("iframe");
   const [copied, setCopied] = useState(false);
 
-  // Use window.location.origin at runtime so it works on any domain
-  const origin =
-    typeof window !== "undefined"
-      ? window.location.origin
-      : "https://mmela-sales-hub-edletshumas-projects.vercel.app";
-
-  const formUrl = `${origin}/f/${formSlug}`;
+  const formUrl = getFormUrl(formSlug);
 
   const snippets: Record<EmbedType, { code: string; label: string; description: string }> = {
     iframe: {

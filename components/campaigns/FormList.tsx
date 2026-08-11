@@ -26,6 +26,7 @@ import {
   Code2,
 } from "lucide-react";
 import EmbedSnippetModal from "@/components/campaigns/EmbedSnippetModal";
+import { getFormUrl } from "@/lib/site-url";
 
 interface FormListProps {
   onEditForm: (formId: string) => void;
@@ -69,11 +70,6 @@ export default function FormList({ onEditForm }: FormListProps) {
   const filtered = forms.filter((f) =>
     f.name.toLowerCase().includes(search.toLowerCase())
   );
-
-  const getFormUrl = (slug: string) => {
-    const base = typeof window !== "undefined" ? window.location.origin : "";
-    return `${base}/f/${slug}`;
-  };
 
   const handleCopyLink = async (slug: string) => {
     await navigator.clipboard.writeText(getFormUrl(slug));
