@@ -3,6 +3,22 @@ import type { ModuleConfig, MmelaModule } from "@/types";
 
 export const MODULE_CONFIG: Record<MmelaModule, ModuleConfig> = {
 
+  // ── EXECUTIVE ────────────────────────────────────────────────
+  // Standalone cross-business rollup — Sales, Concierge, Credit Health.
+  // Gated by permission, not role, since it's granted independently of
+  // what a user's day-to-day module access looks like.
+  executive: {
+    id: "executive",
+    label: "Executive",
+    description: "Cross-business overview — Sales, Concierge, Credit Health",
+    roles: Object.values(UserRole),
+    permission: Permission.ViewExecutiveDashboard,
+    defaultPath: "/executive",
+    navItems: [
+      { label: "Dashboard", href: "/executive" },
+    ],
+  },
+
   // ── SALES ────────────────────────────────────────────────────
   sales: {
     id: "sales",
@@ -112,11 +128,13 @@ export const MODULE_CONFIG: Record<MmelaModule, ModuleConfig> = {
 
 export const ALL_MODULES = Object.values(MODULE_CONFIG);
 
-export function getAccessibleModules(role: UserRole): ModuleConfig[] {
-  return ALL_MODULES.filter((mod) => mod.roles.includes(role));
+export function getAccessibleModules(role: UserRole, permissions: Permission[] = []): ModuleConfig[] {
+  return ALL_MODULES.filter(
+    (mod) => mod.roles.includes(role) && (!mod.permission || permissions.includes(mod.permission))
+  );
 }
 
-export function getDefaultModule(role: UserRole): ModuleConfig {
-  const accessible = getAccessibleModules(role);
+export function getDefaultModule(role: UserRole, permissions: Permission[] = []): ModuleConfig {
+  const accessible = getAccessibleModules(role, permissions);
   return accessible[0] || MODULE_CONFIG.sales;
 }

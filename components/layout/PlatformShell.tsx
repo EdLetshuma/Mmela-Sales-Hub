@@ -59,9 +59,15 @@ export default function PlatformShell() {
   }, [user, accessibleModules, activeModule, setActiveModule]);
 
   // Push real URLs to browser history so links are shareable/bookmarkable
-  // and the back/forward buttons work as expected.
+  // and the back/forward buttons work as expected. Also switches the active
+  // module when the target path belongs to a different one (e.g. the
+  // Executive Dashboard linking into a Sales lead) — otherwise ModuleHome
+  // would keep rendering the old module's routes for the new path.
   function navigate(path: string) {
-    window.history.pushState({ path, module: activeModule }, "", path);
+    const segId = path.split("/").filter(Boolean)[0];
+    const targetModule = accessibleModules.find((m) => m.id === segId)?.id ?? activeModule;
+    if (targetModule !== activeModule) setActiveModule(targetModule as MmelaModule);
+    window.history.pushState({ path, module: targetModule }, "", path);
     setActivePath(path);
   }
 

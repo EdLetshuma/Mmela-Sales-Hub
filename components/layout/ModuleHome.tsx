@@ -63,19 +63,22 @@ export default function ModuleHome({ module, segment, activePath, onNavigate }: 
 
   if (!user) return null;
 
+  // ── EXECUTIVE ──────────────────────────────────────────────
+  // Standalone cross-business rollup, not nested under any one module.
+  if (module === "executive") {
+    return <ExecutiveDashboard onNavigate={onNavigate} />;
+  }
+
   // ── SALES ──────────────────────────────────────────────────
   if (module === "sales") {
     const leadId = activePath.match(/^\/sales\/leads\/([^/]+)$/)?.[1];
     const clientId = activePath.match(/^\/sales\/clients\/([^/]+)$/)?.[1];
     const policyId = activePath.match(/^\/sales\/policies\/([^/]+)$/)?.[1];
 
-    const isExecutive = (user.permissions ?? []).includes(Permission.ViewExecutiveDashboard);
     const hasLeadsAccess = (user.permissions ?? []).includes(Permission.ViewLeads);
-    const homeDashboard = isExecutive
-      ? <ExecutiveDashboard onNavigate={onNavigate} />
-      : hasLeadsAccess
-        ? <SalesDashboard segment={segment} onNavigate={onNavigate} />
-        : <PolicyAdminDashboard segment={segment} onNavigate={onNavigate} />;
+    const homeDashboard = hasLeadsAccess
+      ? <SalesDashboard segment={segment} onNavigate={onNavigate} />
+      : <PolicyAdminDashboard segment={segment} onNavigate={onNavigate} />;
 
     // Policy Admin (and anyone else without lead access) never sees leads,
     // even via a direct URL — their work is clients/policies/retentions.

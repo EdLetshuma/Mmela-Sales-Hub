@@ -76,13 +76,16 @@ export interface User {
 
 // --- Module Access ---
 
-export type MmelaModule = "sales" | "campaigns" | "concierge" | "credit-health" | "hub";
+export type MmelaModule = "executive" | "sales" | "campaigns" | "concierge" | "credit-health" | "hub";
 
 export interface ModuleConfig {
   id: MmelaModule;
   label: string;
   description: string;
   roles: UserRole[];
+  // Extra gate on top of `roles` — module is only accessible when the user
+  // also holds this permission. Omit for modules gated by role alone.
+  permission?: Permission;
   defaultPath: string;
   navItems: NavItem[];
 }

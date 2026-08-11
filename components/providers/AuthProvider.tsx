@@ -49,7 +49,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [error, setError] = useState<string | null>(null);
   const [activeModule, setActiveModule] = useState<MmelaModule>("sales");
 
-  const accessibleModules = user ? getAccessibleModules(user.role) : [];
+  const accessibleModules = user ? getAccessibleModules(user.role, user.permissions ?? []) : [];
   const lastActivityRef = useRef(Date.now());
 
   async function autoLogout() {
@@ -64,7 +64,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         const profile = await getUserProfile(session.user.id);
         setUser(profile);
         if (profile) {
-          const defaultMod = getDefaultModule(profile.role);
+          const defaultMod = getDefaultModule(profile.role, profile.permissions ?? []);
           setActiveModule(defaultMod.id);
         }
       } else {

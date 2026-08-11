@@ -110,6 +110,10 @@ export async function getConciergeStats() {
   const leads = data ?? [];
   const now = new Date();
   const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1).toISOString();
+  const startOfLastMonth = new Date(now.getFullYear(), now.getMonth() - 1, 1).toISOString();
+  const thisMonth = leads.filter((l) => l.created_at >= startOfMonth).length;
+  const lastMonth = leads.filter((l) => l.created_at >= startOfLastMonth && l.created_at < startOfMonth).length;
+  const growthPct = lastMonth === 0 ? (thisMonth > 0 ? 100 : 0) : Math.round(((thisMonth - lastMonth) / lastMonth) * 1000) / 10;
 
   return {
     total: leads.length,
@@ -119,6 +123,7 @@ export async function getConciergeStats() {
     ).length,
     won: leads.filter((l) => l.unit_status === "Won").length,
     unassigned: leads.filter((l) => !l.assigned_to_user_id).length,
-    thisMonth: leads.filter((l) => l.created_at >= startOfMonth).length,
+    thisMonth,
+    growthPct,
   };
 }

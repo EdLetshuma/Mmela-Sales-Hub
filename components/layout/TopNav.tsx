@@ -12,7 +12,7 @@ import ProfileViewModal from "@/components/admin/ProfileViewModal";
 import ProfileEditModal from "@/components/admin/ProfileEditModal";
 import QuickReferralModal from "@/components/shared/QuickReferralModal";
 
-const MODULE_ORDER = ["sales", "campaigns", "concierge", "credit-health", "hub"];
+const MODULE_ORDER = ["executive", "sales", "campaigns", "concierge", "credit-health", "hub"];
 
 interface TopNavProps {
   segment: ClientSegment;

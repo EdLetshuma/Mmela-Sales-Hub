@@ -2,7 +2,7 @@
 
 import React, { useEffect, useState } from "react";
 import { useAuth } from "@/components/providers/AuthProvider";
-import { getExecutiveOverview, type ExecutiveOverview } from "@/lib/sales-api";
+import { getExecutiveOverview, EXECUTIVE_RANGE_LABELS, type ExecutiveOverview, type ExecutiveRange } from "@/lib/sales-api";
 import {
   AreaChart, Area, PieChart, Pie, Cell,
   XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer,
@@ -34,19 +34,22 @@ function getInitials(name: string): string {
 }
 
 function GrowthTag({ pct }: { pct: number }) {
-  if (pct === 0) return <span className="text-xs text-gray-400">No change vs last month</span>;
+  if (pct === 0) return <span className="text-xs text-gray-400">No change vs previous period</span>;
   const up = pct > 0;
   return (
     <span className={`text-xs font-medium ${up ? "text-emerald-600" : "text-red-500"}`}>
-      {up ? "↗" : "↘"} {Math.abs(pct)}% vs last month
+      {up ? "↗" : "↘"} {Math.abs(pct)}% vs previous period
     </span>
   );
 }
+
+const RANGE_OPTIONS: ExecutiveRange[] = ["30d", "90d", "mtd", "ytd", "all"];
 
 export default function ExecutiveDashboard({ onNavigate }: ExecutiveDashboardProps) {
   const { user } = useAuth();
   const firstName = user?.name?.split(" ")[0] ?? "there";
 
+  const [range, setRange] = useState<ExecutiveRange>("30d");
   const [data, setData] = useState<ExecutiveOverview | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -54,14 +57,14 @@ export default function ExecutiveDashboard({ onNavigate }: ExecutiveDashboardPro
   useEffect(() => {
     setLoading(true);
     setError(null);
-    getExecutiveOverview()
+    getExecutiveOverview(range)
       .then(setData)
       .catch((err) => {
         console.error(err);
         setError("Failed to load the executive overview.");
       })
       .finally(() => setLoading(false));
-  }, []);
+  }, [range]);
 
   if (loading) {
     return (
@@ -113,11 +116,26 @@ export default function ExecutiveDashboard({ onNavigate }: ExecutiveDashboardPro
             </div>
             <h1 className="text-2xl font-bold text-white">Welcome back, {firstName}.</h1>
             <p className="text-sm mt-2" style={{ color: "rgba(204,224,245,.85)" }}>
-              You&apos;ve got <strong className="text-white">{totals.leadsThisMonth} new leads</strong> this month across the business,
+              You&apos;ve got <strong className="text-white">{totals.totalLeads} new leads</strong> in the selected period across the business,
               and <strong className="text-white">{totals.unassignedLeads} waiting</strong> to be assigned. Here&apos;s the state of Mmela right now.
             </p>
           </div>
         </div>
+      </div>
+
+      {/* Filters — every card below reacts to this */}
+      <div className="flex items-center gap-2.5">
+        <span className="text-xs font-medium text-gray-500">Show data for</span>
+        <select
+          className="input-field"
+          style={{ width: "auto", fontSize: 13, padding: "6px 28px 6px 10px" }}
+          value={range}
+          onChange={(e) => setRange(e.target.value as ExecutiveRange)}
+        >
+          {RANGE_OPTIONS.map((r) => (
+            <option key={r} value={r}>{EXECUTIVE_RANGE_LABELS[r]}</option>
+          ))}
+        </select>
       </div>
 
       {/* KPI row */}
@@ -125,9 +143,7 @@ export default function ExecutiveDashboard({ onNavigate }: ExecutiveDashboardPro
         <div className="card">
           <p className="text-xs font-medium text-gray-500 mb-1.5">Total leads</p>
           <p className="text-2xl font-semibold text-gray-900 tracking-tight">{totals.totalLeads}</p>
-          {totals.leadsThisMonth > 0 && (
-            <p className="text-xs mt-1.5 font-medium text-emerald-600">+{totals.leadsThisMonth} this month</p>
-          )}
+          <div className="mt-1.5"><GrowthTag pct={totals.periodGrowthPct} /></div>
         </div>
         <div className="card">
           <p className="text-xs font-medium text-gray-500 mb-1.5">Active clients</p>
@@ -330,7 +346,7 @@ export default function ExecutiveDashboard({ onNavigate }: ExecutiveDashboardPro
           <div className="flex items-center justify-between mb-3">
             <div>
               <h2 className="text-sm font-semibold text-gray-900">Recent leads</h2>
-              <p className="text-xs text-gray-400">Latest activity across all units</p>
+              <p className="text-xs text-gray-400">Across all units &middot; {EXECUTIVE_RANGE_LABELS[range]}</p>
             </div>
             <button className="btn btn-ghost text-xs text-brand-700 hover:text-brand-900" onClick={() => onNavigate("/sales/leads")}>
               View all <ArrowRight className="w-3.5 h-3.5 ml-1" />
@@ -383,9 +399,9 @@ export default function ExecutiveDashboard({ onNavigate }: ExecutiveDashboardPro
 
           <div className="card">
             <h2 className="text-sm font-semibold text-gray-900 mb-3">Top performers</h2>
-            <p className="text-xs text-gray-400 mb-2 -mt-2">This month</p>
+            <p className="text-xs text-gray-400 mb-2 -mt-2">{EXECUTIVE_RANGE_LABELS[range]}</p>
             {topPerformers.length === 0 ? (
-              <p className="text-sm text-gray-400">No closed deals yet this month.</p>
+              <p className="text-sm text-gray-400">No closed deals in this period.</p>
             ) : (
               <div className="space-y-2.5">
                 {topPerformers.map((p, i) => (

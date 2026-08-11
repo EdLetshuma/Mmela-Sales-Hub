@@ -779,10 +779,20 @@ export interface ExecutiveUnitStats {
   growthPct: number;
 }
 
+export type ExecutiveRange = "30d" | "90d" | "mtd" | "ytd" | "all";
+
+export const EXECUTIVE_RANGE_LABELS: Record<ExecutiveRange, string> = {
+  "30d": "Last 30 days",
+  "90d": "Last 90 days",
+  mtd: "Month to date",
+  ytd: "Year to date",
+  all: "All time",
+};
+
 export interface ExecutiveOverview {
   totals: {
     totalLeads: number;
-    leadsThisMonth: number;
+    periodGrowthPct: number;
     totalClients: number;
     activePolicies: number;
     totalMonthlyPremium: number;
@@ -807,10 +817,28 @@ export interface ExecutiveOverview {
 
 const MONTH_LABELS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
 
-export async function getExecutiveOverview(): Promise<ExecutiveOverview> {
+// "All time" has no natural previous period to compare against, so growth
+// there falls back to the current calendar month vs the previous one —
+// every other range compares against an equal-length period right before it.
+function rangeToDates(range: ExecutiveRange, now: Date): { since: Date | null; prevSince: Date | null; prevUntil: Date | null } {
+  if (range === "all") return { since: null, prevSince: null, prevUntil: null };
+  let since: Date;
+  if (range === "30d") since = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000);
+  else if (range === "90d") since = new Date(now.getTime() - 90 * 24 * 60 * 60 * 1000);
+  else if (range === "mtd") since = new Date(now.getFullYear(), now.getMonth(), 1);
+  else since = new Date(now.getFullYear(), 0, 1); // ytd
+  const spanMs = now.getTime() - since.getTime();
+  return { since, prevSince: new Date(since.getTime() - spanMs), prevUntil: since };
+}
+
+export async function getExecutiveOverview(range: ExecutiveRange = "30d"): Promise<ExecutiveOverview> {
   const now = new Date();
   const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1).toISOString();
   const startOfLastMonth = new Date(now.getFullYear(), now.getMonth() - 1, 1).toISOString();
+  const { since, prevSince, prevUntil } = rangeToDates(range, now);
+  const inRange = (l: { created_at: string }) => !since || l.created_at >= since.toISOString();
+  const closedInRange = (l: { closed_at: string | null }) =>
+    !!l.closed_at && (!since || l.closed_at >= since.toISOString());
 
   const [leadsRes, clientsRes, policiesRes, usersRes] = await Promise.all([
     supabase.from("leads").select(
@@ -831,11 +859,17 @@ export async function getExecutiveOverview(): Promise<ExecutiveOverview> {
   const users = usersRes.data ?? [];
 
   const isSales = (bu: string | null) => !bu || bu === SALES_UNIT_ID;
-  const salesLeads = allLeads.filter((l) => isSales(l.business_unit_id));
-  const conciergeLeads = allLeads.filter((l) => l.business_unit_id === CONCIERGE_UNIT_ID);
-  const creditHealthLeads = allLeads.filter((l) => l.business_unit_id === CREDIT_HEALTH_UNIT_ID);
+  // "All" variants are unfiltered by date — needed so growth() can look at
+  // the previous period, which the range-filtered variants have discarded.
+  const salesLeadsAll = allLeads.filter((l) => isSales(l.business_unit_id));
+  const conciergeLeadsAll = allLeads.filter((l) => l.business_unit_id === CONCIERGE_UNIT_ID);
+  const creditHealthLeadsAll = allLeads.filter((l) => l.business_unit_id === CREDIT_HEALTH_UNIT_ID);
+  const salesLeads = salesLeadsAll.filter(inRange);
+  const conciergeLeads = conciergeLeadsAll.filter(inRange);
+  const creditHealthLeads = creditHealthLeadsAll.filter(inRange);
 
-  const leadsThisMonth = salesLeads.filter((l) => l.created_at >= startOfMonth).length;
+  // Client/policy counts reflect current state, not the selected period —
+  // "42 active policies" isn't a historical event to filter by date.
   const activePolicies = allPolicies.filter((p) => p.status === "Active");
   const totalMonthlyPremium = activePolicies.reduce((s, p) => s + (Number(p.premium) || 0), 0);
   const won = salesLeads.filter((l) => l.status === "Won").length;
@@ -843,12 +877,20 @@ export async function getExecutiveOverview(): Promise<ExecutiveOverview> {
   const unassignedLeads = salesLeads.filter((l) => !l.assigned_to_user_id).length;
 
   function growth(list: { created_at: string }[]): number {
-    const thisM = list.filter((l) => l.created_at >= startOfMonth).length;
-    const lastM = list.filter((l) => l.created_at >= startOfLastMonth && l.created_at < startOfMonth).length;
-    if (lastM === 0) return thisM > 0 ? 100 : 0;
-    return Math.round(((thisM - lastM) / lastM) * 1000) / 10;
+    if (!since || !prevSince || !prevUntil) {
+      const thisM = list.filter((l) => l.created_at >= startOfMonth).length;
+      const lastM = list.filter((l) => l.created_at >= startOfLastMonth && l.created_at < startOfMonth).length;
+      if (lastM === 0) return thisM > 0 ? 100 : 0;
+      return Math.round(((thisM - lastM) / lastM) * 1000) / 10;
+    }
+    const curr = list.filter((l) => l.created_at >= since.toISOString()).length;
+    const prev = list.filter((l) => l.created_at >= prevSince.toISOString() && l.created_at < prevUntil.toISOString()).length;
+    if (prev === 0) return curr > 0 ? 100 : 0;
+    return Math.round(((curr - prev) / prev) * 1000) / 10;
   }
 
+  const personalLeadsAll = salesLeadsAll.filter((l) => l.segment === "Individual");
+  const commercialLeadsAll = salesLeadsAll.filter((l) => l.segment === "Commercial");
   const personalLeads = salesLeads.filter((l) => l.segment === "Individual");
   const commercialLeads = salesLeads.filter((l) => l.segment === "Commercial");
   const personalActivePolicies = activePolicies.filter((p) => p.client_segment === "Individual");
@@ -861,7 +903,7 @@ export async function getExecutiveOverview(): Promise<ExecutiveOverview> {
       activePolicies: personalActivePolicies.length,
       monthlyPremium: personalActivePolicies.reduce((s, p) => s + (Number(p.premium) || 0), 0),
       unassigned: personalLeads.filter((l) => !l.assigned_to_user_id).length,
-      growthPct: growth(personalLeads),
+      growthPct: growth(personalLeadsAll),
     },
     commercial: {
       leads: commercialLeads.length,
@@ -869,21 +911,21 @@ export async function getExecutiveOverview(): Promise<ExecutiveOverview> {
       activePolicies: commercialActivePolicies.length,
       monthlyPremium: commercialActivePolicies.reduce((s, p) => s + (Number(p.premium) || 0), 0),
       unassigned: commercialLeads.filter((l) => !l.assigned_to_user_id).length,
-      growthPct: growth(commercialLeads),
+      growthPct: growth(commercialLeadsAll),
     },
     concierge: {
       leads: conciergeLeads.length,
       active: conciergeLeads.filter((l) => ["Contacted", "Sourcing", "Quote Sent"].includes(l.unit_status ?? "")).length,
       closed: conciergeLeads.filter((l) => l.unit_status === "Won").length,
       unassigned: conciergeLeads.filter((l) => !l.assigned_to_user_id).length,
-      growthPct: growth(conciergeLeads),
+      growthPct: growth(conciergeLeadsAll),
     },
     creditHealth: {
       leads: creditHealthLeads.length,
       active: creditHealthLeads.filter((l) => ["Contacted", "Assessment", "Submitted"].includes(l.unit_status ?? "")).length,
       closed: creditHealthLeads.filter((l) => l.unit_status === "Approved").length,
       unassigned: creditHealthLeads.filter((l) => !l.assigned_to_user_id).length,
-      growthPct: growth(creditHealthLeads),
+      growthPct: growth(creditHealthLeadsAll),
     },
   };
 
@@ -906,7 +948,8 @@ export async function getExecutiveOverview(): Promise<ExecutiveOverview> {
     return segment === "Commercial" ? "Commercial Insurance" : "Personal Insurance";
   };
 
-  const recentLeads = [...allLeads]
+  const recentLeads = allLeads
+    .filter(inRange)
     .sort((a, b) => (b.created_at ?? "").localeCompare(a.created_at ?? ""))
     .slice(0, 6)
     .map((l) => ({
@@ -933,12 +976,12 @@ export async function getExecutiveOverview(): Promise<ExecutiveOverview> {
     alerts.push({ id: "pending-docs", label: `${pendingDocs} active polic${pendingDocs !== 1 ? "ies" : "y"} missing documentation`, detail: "Documentation status incomplete", tone: "danger" });
   }
 
-  const closedThisMonth = allLeads.filter(
-    (l) => l.closed_at && l.closed_at >= startOfMonth &&
+  const closedInPeriod = allLeads.filter(
+    (l) => closedInRange(l) &&
       (l.status === "Won" || l.unit_status === "Won" || l.unit_status === "Approved")
   );
   const closedByUser = new Map<string, number>();
-  closedThisMonth.forEach((l) => {
+  closedInPeriod.forEach((l) => {
     if (!l.assigned_to_user_id) return;
     closedByUser.set(l.assigned_to_user_id, (closedByUser.get(l.assigned_to_user_id) ?? 0) + 1);
   });
@@ -953,7 +996,7 @@ export async function getExecutiveOverview(): Promise<ExecutiveOverview> {
   return {
     totals: {
       totalLeads: salesLeads.length,
-      leadsThisMonth,
+      periodGrowthPct: growth(salesLeadsAll),
       totalClients: allClients.length,
       activePolicies: activePolicies.length,
       totalMonthlyPremium,
