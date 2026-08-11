@@ -44,20 +44,52 @@ export function ChangeTag({ pct, invert = false }: { pct: number | null; invert?
   );
 }
 
+// Mirrors TopNav's primary nav row (px-3, h-10, underline indicator) so an
+// in-page tab bar reads as a continuation of the same nav rhythm, not a
+// separate widget.
 export function TabBar<T extends string>({ tabs, active, onChange }: { tabs: { key: T; label: string }[]; active: T; onChange: (t: T) => void }) {
   return (
-    <div className="flex gap-1 border-b border-gray-200 overflow-x-auto">
-      {tabs.map((t) => (
-        <button
-          key={t.key}
-          onClick={() => onChange(t.key)}
-          className={`px-3 py-2 text-sm font-medium whitespace-nowrap border-b-2 -mb-px transition-colors ${
-            active === t.key ? "border-brand-700 text-brand-700" : "border-transparent text-gray-500 hover:text-gray-900"
-          }`}
-        >
-          {t.label}
-        </button>
-      ))}
+    <div className="bg-white border-b border-gray-200">
+      <div className="flex items-center h-10 gap-0 overflow-x-auto">
+        {tabs.map((t) => (
+          <button
+            key={t.key}
+            onClick={() => onChange(t.key)}
+            className={`px-3 h-10 text-[13px] font-medium whitespace-nowrap transition-colors relative ${
+              active === t.key ? "text-brand-900" : "text-gray-500 hover:text-gray-900"
+            }`}
+          >
+            {t.label}
+            {active === t.key && (
+              <span className="absolute bottom-0 left-3 right-3 h-[2px] bg-brand-900 rounded-full" />
+            )}
+          </button>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+// Mirrors TopNav's sub-nav pill row (h-9, rounded-full pills on a tinted bar)
+// — used for the second level of tabs nested under a TabBar.
+export function SubTabBar<T extends string>({ tabs, active, onChange }: { tabs: { key: T; label: string }[]; active: T; onChange: (t: T) => void }) {
+  return (
+    <div className="bg-gray-50 border-b border-gray-200">
+      <div className="flex items-center h-9 gap-1.5 overflow-x-auto px-1">
+        {tabs.map((t) => (
+          <button
+            key={t.key}
+            onClick={() => onChange(t.key)}
+            className={`px-3 py-1 rounded-full text-[12px] font-medium whitespace-nowrap transition-all ${
+              active === t.key
+                ? "bg-white text-gray-900 border border-gray-200 shadow-sm"
+                : "text-gray-500 hover:text-gray-700 hover:bg-white/60"
+            }`}
+          >
+            {t.label}
+          </button>
+        ))}
+      </div>
     </div>
   );
 }

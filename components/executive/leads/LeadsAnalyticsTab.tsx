@@ -7,7 +7,7 @@ import LeadFunnel from "./LeadFunnel";
 import LeadSources from "./LeadSources";
 import LeadAging from "./LeadAging";
 import LostLeads from "./LostLeads";
-import { TabBar } from "./shared";
+import { SubTabBar } from "./shared";
 
 type SubTab = "overview" | "funnel" | "sources" | "aging" | "lost";
 
@@ -25,7 +25,7 @@ export default function LeadsAnalyticsTab({ division, onlyUserId }: { division: 
 
   return (
     <div className="space-y-6">
-      <TabBar tabs={SUB_TABS} active={sub} onChange={setSub} />
+      <SubTabBar tabs={SUB_TABS} active={sub} onChange={setSub} />
       {sub === "overview" && <LeadOverview scope={scope} />}
       {sub === "funnel" && <LeadFunnel fixedDivision={division} onlyUserId={onlyUserId} />}
       {sub === "sources" && <LeadSources scope={scope} />}
