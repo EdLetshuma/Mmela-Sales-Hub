@@ -58,6 +58,7 @@ export enum Permission {
   // New Hub permissions
   ManageCampaigns = "Manage Campaigns",
   ManageForms = "Manage Forms",
+  DeleteForms = "Delete Forms",
   ManageRouting = "Manage Routing",
   ViewCampaignAnalytics = "View Campaign Analytics",
 }

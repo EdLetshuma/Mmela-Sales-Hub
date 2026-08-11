@@ -6,9 +6,11 @@ import {
   getCampaigns,
   createForm,
   updateForm,
+  deleteForm,
   getBusinessUnits,
 } from "@/lib/campaigns-api";
 import { useAuth } from "@/components/providers/AuthProvider";
+import { Permission } from "@/types";
 import type { Form, Campaign, BusinessUnit } from "@/types";
 import {
   Plus,
@@ -22,6 +24,7 @@ import {
   ToggleRight,
   Pencil,
   MoreHorizontal,
+  Trash2,
   X,
   Code2,
 } from "lucide-react";
@@ -83,6 +86,18 @@ export default function FormList({ onEditForm }: FormListProps) {
       await loadData();
     } catch (err) {
       console.error("Failed to toggle form:", err);
+    }
+  };
+
+  const canDelete = (user?.permissions ?? []).includes(Permission.DeleteForms);
+
+  const handleDelete = async (form: Form) => {
+    if (!window.confirm(`Delete "${form.name}"? Any QR codes or links already out there will stop working. This can't be undone.`)) return;
+    try {
+      await deleteForm(form.id);
+      await loadData();
+    } catch (err) {
+      alert(err instanceof Error ? err.message : "Failed to delete form.");
     }
   };
 
@@ -244,6 +259,15 @@ export default function FormList({ onEditForm }: FormListProps) {
                       <><ToggleLeft className="w-4 h-4" /> Inactive</>
                     )}
                   </button>
+                  {canDelete && (
+                    <button
+                      onClick={() => handleDelete(form)}
+                      className="btn btn-ghost p-1.5 text-red-400 hover:text-red-600"
+                      title="Delete form"
+                    >
+                      <Trash2 className="w-3.5 h-3.5" />
+                    </button>
+                  )}
                 </div>
 
                 {/* QR Code popup - outside flex row so it can overflow */}

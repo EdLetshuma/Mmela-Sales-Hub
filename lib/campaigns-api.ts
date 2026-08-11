@@ -154,6 +154,19 @@ export async function updateForm(
   return data;
 }
 
+export async function deleteForm(id: string): Promise<void> {
+  const { error } = await supabase.from("forms").delete().eq("id", id);
+  if (error) {
+    // FK on leads.form_id has no cascade — the DB itself refuses to delete
+    // a form that leads were captured through, so a printed QR code that
+    // already generated leads can't silently orphan them.
+    if (error.code === "23503") {
+      throw new Error("This form has captured leads and can't be deleted. Deactivate it instead so its link stops accepting new submissions.");
+    }
+    throw error;
+  }
+}
+
 // ============================================================
 // FORM FIELDS
 // ============================================================

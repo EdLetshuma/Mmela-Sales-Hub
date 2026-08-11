@@ -37,7 +37,7 @@ const PERMISSION_GROUPS: Record<string, string[]> = {
   "Leads": ["View Leads", "Manage Lead Pool", "View Lead Import", "View Referrals", "Delete Leads"],
   "Clients": ["View Clients", "Edit Clients", "Delete Clients"],
   "Policies": ["View Policies", "Edit Policies", "Delete Policies", "View Retentions", "View Alerts"],
-  "Campaigns": ["Manage Campaigns", "Manage Forms", "Manage Routing"],
+  "Campaigns": ["Manage Campaigns", "Manage Forms", "Delete Forms", "Manage Routing"],
   "Administration": ["Access Admin Panel", "Manage Catalog", "Delete Users"],
 };
 
