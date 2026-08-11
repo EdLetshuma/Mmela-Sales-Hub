@@ -44,6 +44,24 @@ export function ChangeTag({ pct, invert = false }: { pct: number | null; invert?
   );
 }
 
+export function TabBar<T extends string>({ tabs, active, onChange }: { tabs: { key: T; label: string }[]; active: T; onChange: (t: T) => void }) {
+  return (
+    <div className="flex gap-1 border-b border-gray-200 overflow-x-auto">
+      {tabs.map((t) => (
+        <button
+          key={t.key}
+          onClick={() => onChange(t.key)}
+          className={`px-3 py-2 text-sm font-medium whitespace-nowrap border-b-2 -mb-px transition-colors ${
+            active === t.key ? "border-brand-700 text-brand-700" : "border-transparent text-gray-500 hover:text-gray-900"
+          }`}
+        >
+          {t.label}
+        </button>
+      ))}
+    </div>
+  );
+}
+
 export function KpiCard({ label, value, sub }: { label: string; value: string; sub?: React.ReactNode }) {
   return (
     <div className="card">

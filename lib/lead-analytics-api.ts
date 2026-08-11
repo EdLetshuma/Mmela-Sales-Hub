@@ -63,6 +63,23 @@ function periodMetric(curr: number, prev: number): PeriodMetric {
   return { value: curr, prevValue: prev, pctChange: Math.round(((curr - prev) / prev) * 1000) / 10 };
 }
 
+// Every Lead Analytics query can be scoped two ways: to one division
+// (e.g. viewing this from inside the Sales module rather than Executive's
+// cross-division rollup), and to one user's own leads (a Sales Agent
+// looking at "my performance" shouldn't see teammates' leads). Both are
+// optional — Executive's cross-division views pass neither.
+export interface LeadScope {
+  division?: "sales" | "concierge" | "creditHealth";
+  onlyUserId?: string;
+}
+
+function applyScope(leads: RawLead[], scope?: LeadScope): RawLead[] {
+  let out = leads;
+  if (scope?.division) out = out.filter((l) => divisionOf(l.business_unit_id) === scope.division);
+  if (scope?.onlyUserId) out = out.filter((l) => l.assigned_to_user_id === scope.onlyUserId);
+  return out;
+}
+
 export interface BreakdownRow { label: string; count: number; }
 
 function breakdown(leads: RawLead[], key: (l: RawLead) => string | null, fallback = "Unknown"): BreakdownRow[] {
@@ -97,7 +114,7 @@ export interface LeadOverviewData {
   };
 }
 
-export async function getLeadOverview(range: ExecutiveRange = "30d"): Promise<LeadOverviewData> {
+export async function getLeadOverview(range: ExecutiveRange = "30d", scope?: LeadScope): Promise<LeadOverviewData> {
   const now = new Date();
   const { since, prevSince, prevUntil } = rangeToDates(range, now);
 
@@ -108,7 +125,7 @@ export async function getLeadOverview(range: ExecutiveRange = "30d"): Promise<Le
   if (leadsRes.error) throw leadsRes.error;
   if (usersRes.error) throw usersRes.error;
 
-  const allLeads = (leadsRes.data ?? []) as RawLead[];
+  const allLeads = applyScope((leadsRes.data ?? []) as RawLead[], scope);
   const userNames = new Map((usersRes.data ?? []).map((u) => [u.id, u.name]));
 
   const inWindow = (createdAt: string, from: Date | null, to: Date | null) =>
@@ -175,7 +192,7 @@ export interface FunnelData {
   leadsByStage: Record<string, { id: string; name: string }[]>;
 }
 
-export async function getLeadFunnel(division: FunnelDivision, range: ExecutiveRange = "30d"): Promise<FunnelData> {
+export async function getLeadFunnel(division: FunnelDivision, range: ExecutiveRange = "30d", onlyUserId?: string): Promise<FunnelData> {
   const now = new Date();
   const { since } = rangeToDates(range, now);
   const { data, error } = await supabase.from("leads").select(LEAD_COLUMNS);
@@ -184,7 +201,9 @@ export async function getLeadFunnel(division: FunnelDivision, range: ExecutiveRa
 
   const buId = division === "sales" ? null : division === "concierge" ? CONCIERGE_UNIT_ID : CREDIT_HEALTH_UNIT_ID;
   const inDivision = (l: RawLead) => (division === "sales" ? isSales(l.business_unit_id) : l.business_unit_id === buId);
-  const leads = allLeads.filter((l) => inDivision(l) && (!since || l.created_at >= since.toISOString()));
+  const leads = allLeads.filter((l) =>
+    inDivision(l) && (!since || l.created_at >= since.toISOString()) && (!onlyUserId || l.assigned_to_user_id === onlyUserId)
+  );
 
   const stageOrder = FUNNEL_STAGES[division];
   const leadsByStage: Record<string, { id: string; name: string }[]> = {};
@@ -269,7 +288,7 @@ async function buildSourceRows(leads: RawLead[], key: (l: RawLead) => string | n
   }).sort((a, b) => b.leads - a.leads);
 }
 
-export async function getLeadSources(range: ExecutiveRange = "30d"): Promise<LeadSourceData> {
+export async function getLeadSources(range: ExecutiveRange = "30d", scope?: LeadScope): Promise<LeadSourceData> {
   const now = new Date();
   const { since } = rangeToDates(range, now);
   const [leadsRes, policiesRes] = await Promise.all([
@@ -279,7 +298,7 @@ export async function getLeadSources(range: ExecutiveRange = "30d"): Promise<Lea
   if (leadsRes.error) throw leadsRes.error;
   if (policiesRes.error) throw policiesRes.error;
 
-  const allLeads = ((leadsRes.data ?? []) as RawLead[]).filter((l) => !since || l.created_at >= since.toISOString());
+  const allLeads = applyScope((leadsRes.data ?? []) as RawLead[], scope).filter((l) => !since || l.created_at >= since.toISOString());
 
   // Premium/policy count attributed via each lead's linked client — a
   // client with more than one lead would see that premium counted once
@@ -310,7 +329,7 @@ export async function getLeadSources(range: ExecutiveRange = "30d"): Promise<Lea
 
 export interface AgingBucket { label: string; count: number; leads: { id: string; name: string; ageDays: number }[]; }
 
-export async function getLeadAging(): Promise<{ buckets: AgingBucket[]; hasActivityData: boolean }> {
+export async function getLeadAging(scope?: LeadScope): Promise<{ buckets: AgingBucket[]; hasActivityData: boolean }> {
   const now = new Date();
   const [leadsRes, activityRes] = await Promise.all([
     supabase.from("leads").select(LEAD_COLUMNS).is("closed_at", null),
@@ -319,7 +338,7 @@ export async function getLeadAging(): Promise<{ buckets: AgingBucket[]; hasActiv
   if (leadsRes.error) throw leadsRes.error;
   if (activityRes.error) throw activityRes.error;
 
-  const open = (leadsRes.data ?? []) as RawLead[];
+  const open = applyScope((leadsRes.data ?? []) as RawLead[], scope);
   const bucketDefs: { label: string; min: number; max: number }[] = [
     { label: "0–1 days", min: 0, max: 1 },
     { label: "2–3 days", min: 2, max: 3 },
@@ -356,7 +375,7 @@ export interface LostLeadsData {
   bySource: BreakdownRow[];
 }
 
-export async function getLostLeads(range: ExecutiveRange = "30d"): Promise<LostLeadsData> {
+export async function getLostLeads(range: ExecutiveRange = "30d", scope?: LeadScope): Promise<LostLeadsData> {
   const now = new Date();
   const { since, prevSince, prevUntil } = rangeToDates(range, now);
   const [leadsRes, usersRes] = await Promise.all([
@@ -366,7 +385,7 @@ export async function getLostLeads(range: ExecutiveRange = "30d"): Promise<LostL
   if (leadsRes.error) throw leadsRes.error;
   if (usersRes.error) throw usersRes.error;
 
-  const allLeads = (leadsRes.data ?? []) as RawLead[];
+  const allLeads = applyScope((leadsRes.data ?? []) as RawLead[], scope);
   const userNames = new Map((usersRes.data ?? []).map((u) => [u.id, u.name]));
   const inWindow = (createdAt: string, from: Date | null, to: Date | null) =>
     (!from || createdAt >= from.toISOString()) && (!to || createdAt < to.toISOString());

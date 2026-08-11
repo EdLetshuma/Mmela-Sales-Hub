@@ -1,7 +1,7 @@
 "use client";
 
 import React, { useEffect, useState } from "react";
-import { getLeadSources, type LeadSourceData, type SourceRow } from "@/lib/lead-analytics-api";
+import { getLeadSources, type LeadSourceData, type SourceRow, type LeadScope } from "@/lib/lead-analytics-api";
 import type { ExecutiveRange } from "@/lib/sales-api";
 import { RangeSelect, formatCurrency } from "./shared";
 
@@ -45,7 +45,7 @@ function SourceTable({ title, rows, caption }: { title: string; rows: SourceRow[
   );
 }
 
-export default function LeadSources() {
+export default function LeadSources({ scope }: { scope?: LeadScope } = {}) {
   const [range, setRange] = useState<ExecutiveRange>("30d");
   const [data, setData] = useState<LeadSourceData | null>(null);
   const [refreshing, setRefreshing] = useState(false);
@@ -54,11 +54,12 @@ export default function LeadSources() {
   useEffect(() => {
     setRefreshing(true);
     setError(null);
-    getLeadSources(range)
+    getLeadSources(range, scope)
       .then(setData)
       .catch((err) => { console.error(err); setError("Failed to load lead sources."); })
       .finally(() => setRefreshing(false));
-  }, [range]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [range, scope?.division, scope?.onlyUserId]);
 
   if (!data && !error) return <div className="h-96 bg-gray-100 rounded-lg animate-pulse" />;
   if (error || !data) return <div className="card text-center py-12"><p className="text-sm text-red-500">{error ?? "No data available."}</p></div>;

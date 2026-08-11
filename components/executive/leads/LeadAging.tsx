@@ -1,20 +1,21 @@
 "use client";
 
 import React, { useEffect, useState } from "react";
-import { getLeadAging, type AgingBucket } from "@/lib/lead-analytics-api";
+import { getLeadAging, type AgingBucket, type LeadScope } from "@/lib/lead-analytics-api";
 import { AlertTriangle } from "lucide-react";
 
-export default function LeadAging() {
+export default function LeadAging({ scope }: { scope?: LeadScope } = {}) {
   const [buckets, setBuckets] = useState<AgingBucket[] | null>(null);
   const [hasActivityData, setHasActivityData] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [openBucket, setOpenBucket] = useState<string | null>(null);
 
   useEffect(() => {
-    getLeadAging()
+    getLeadAging(scope)
       .then(({ buckets, hasActivityData }) => { setBuckets(buckets); setHasActivityData(hasActivityData); })
       .catch((err) => { console.error(err); setError("Failed to load lead aging."); });
-  }, []);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [scope?.division, scope?.onlyUserId]);
 
   if (!buckets && !error) return <div className="h-72 bg-gray-100 rounded-lg animate-pulse" />;
   if (error || !buckets) return <div className="card text-center py-12"><p className="text-sm text-red-500">{error ?? "No data available."}</p></div>;

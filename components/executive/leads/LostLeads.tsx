@@ -1,11 +1,11 @@
 "use client";
 
 import React, { useEffect, useState } from "react";
-import { getLostLeads, type LostLeadsData } from "@/lib/lead-analytics-api";
+import { getLostLeads, type LostLeadsData, type LeadScope } from "@/lib/lead-analytics-api";
 import type { ExecutiveRange } from "@/lib/sales-api";
 import { RangeSelect, ChangeTag, KpiCard, BreakdownCard } from "./shared";
 
-export default function LostLeads() {
+export default function LostLeads({ scope }: { scope?: LeadScope } = {}) {
   const [range, setRange] = useState<ExecutiveRange>("30d");
   const [data, setData] = useState<LostLeadsData | null>(null);
   const [refreshing, setRefreshing] = useState(false);
@@ -14,11 +14,12 @@ export default function LostLeads() {
   useEffect(() => {
     setRefreshing(true);
     setError(null);
-    getLostLeads(range)
+    getLostLeads(range, scope)
       .then(setData)
       .catch((err) => { console.error(err); setError("Failed to load lost leads."); })
       .finally(() => setRefreshing(false));
-  }, [range]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [range, scope?.division, scope?.onlyUserId]);
 
   if (!data && !error) return <div className="grid grid-cols-2 gap-4">{[...Array(2)].map((_, i) => <div key={i} className="h-24 bg-gray-100 rounded-lg animate-pulse" />)}</div>;
   if (error || !data) return <div className="card text-center py-12"><p className="text-sm text-red-500">{error ?? "No data available."}</p></div>;

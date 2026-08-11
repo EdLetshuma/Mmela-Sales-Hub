@@ -23,16 +23,6 @@ export const MODULE_CONFIG: Record<MmelaModule, ModuleConfig> = {
           { label: "Divisions", href: "/executive/analytics/divisions" },
         ],
       },
-      {
-        label: "Leads", href: "/executive/leads",
-        children: [
-          { label: "Overview", href: "/executive/leads" },
-          { label: "Funnel", href: "/executive/leads/funnel" },
-          { label: "Sources", href: "/executive/leads/sources" },
-          { label: "Aging", href: "/executive/leads/aging" },
-          { label: "Lost", href: "/executive/leads/lost" },
-        ],
-      },
     ],
   },
 

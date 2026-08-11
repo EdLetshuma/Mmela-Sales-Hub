@@ -11,9 +11,9 @@ const DIVISIONS: { key: FunnelDivision; label: string }[] = [
   { key: "creditHealth", label: "Credit Health" },
 ];
 
-export default function LeadFunnel() {
+export default function LeadFunnel({ fixedDivision, onlyUserId }: { fixedDivision?: FunnelDivision; onlyUserId?: string } = {}) {
   const [range, setRange] = useState<ExecutiveRange>("30d");
-  const [division, setDivision] = useState<FunnelDivision>("sales");
+  const [division, setDivision] = useState<FunnelDivision>(fixedDivision ?? "sales");
   const [data, setData] = useState<FunnelData | null>(null);
   const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -23,26 +23,30 @@ export default function LeadFunnel() {
     setRefreshing(true);
     setError(null);
     setOpenStage(null);
-    getLeadFunnel(division, range)
+    getLeadFunnel(division, range, onlyUserId)
       .then(setData)
       .catch((err) => { console.error(err); setError("Failed to load the lead funnel."); })
       .finally(() => setRefreshing(false));
-  }, [division, range]);
+  }, [division, range, onlyUserId]);
 
   return (
     <div className="space-y-6">
       <div className="flex items-center justify-between flex-wrap gap-3">
-        <div className="flex rounded-md overflow-hidden border border-gray-200">
-          {DIVISIONS.map((d) => (
-            <button
-              key={d.key}
-              onClick={() => setDivision(d.key)}
-              className={`px-3 py-1.5 text-xs font-medium transition-colors ${division === d.key ? "bg-brand-700 text-white" : "bg-white text-gray-500 hover:text-gray-900"}`}
-            >
-              {d.label}
-            </button>
-          ))}
-        </div>
+        {fixedDivision ? (
+          <div />
+        ) : (
+          <div className="flex rounded-md overflow-hidden border border-gray-200">
+            {DIVISIONS.map((d) => (
+              <button
+                key={d.key}
+                onClick={() => setDivision(d.key)}
+                className={`px-3 py-1.5 text-xs font-medium transition-colors ${division === d.key ? "bg-brand-700 text-white" : "bg-white text-gray-500 hover:text-gray-900"}`}
+              >
+                {d.label}
+              </button>
+            ))}
+          </div>
+        )}
         <RangeSelect range={range} setRange={setRange} refreshing={refreshing} />
       </div>
 

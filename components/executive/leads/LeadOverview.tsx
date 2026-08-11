@@ -1,11 +1,11 @@
 "use client";
 
 import React, { useEffect, useState } from "react";
-import { getLeadOverview, type LeadOverviewData } from "@/lib/lead-analytics-api";
+import { getLeadOverview, type LeadOverviewData, type LeadScope } from "@/lib/lead-analytics-api";
 import type { ExecutiveRange } from "@/lib/sales-api";
 import { RangeSelect, ChangeTag, KpiCard, BreakdownCard } from "./shared";
 
-export default function LeadOverview() {
+export default function LeadOverview({ scope }: { scope?: LeadScope } = {}) {
   const [range, setRange] = useState<ExecutiveRange>("30d");
   const [data, setData] = useState<LeadOverviewData | null>(null);
   const [refreshing, setRefreshing] = useState(false);
@@ -14,11 +14,12 @@ export default function LeadOverview() {
   useEffect(() => {
     setRefreshing(true);
     setError(null);
-    getLeadOverview(range)
+    getLeadOverview(range, scope)
       .then(setData)
       .catch((err) => { console.error(err); setError("Failed to load lead overview."); })
       .finally(() => setRefreshing(false));
-  }, [range]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [range, scope?.division, scope?.onlyUserId]);
 
   if (!data && !error) {
     return <div className="grid grid-cols-4 gap-4">{[...Array(7)].map((_, i) => <div key={i} className="h-24 bg-gray-100 rounded-lg animate-pulse" />)}</div>;

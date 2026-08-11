@@ -20,11 +20,6 @@ import SalesDashboard from "@/components/sales/SalesDashboard";
 import ExecutiveDashboard from "@/components/sales/ExecutiveDashboard";
 import AnalyticsOverview from "@/components/executive/AnalyticsOverview";
 import DivisionPerformance from "@/components/executive/DivisionPerformance";
-import LeadOverview from "@/components/executive/leads/LeadOverview";
-import LeadFunnel from "@/components/executive/leads/LeadFunnel";
-import LeadSources from "@/components/executive/leads/LeadSources";
-import LeadAging from "@/components/executive/leads/LeadAging";
-import LostLeads from "@/components/executive/leads/LostLeads";
 import PolicyAdminDashboard from "@/components/sales/PolicyAdminDashboard";
 import SalesLeads from "@/components/sales/SalesLeads";
 import LeadDetail from "@/components/sales/LeadDetail";
@@ -35,18 +30,18 @@ import PolicyDetail from "@/components/sales/PolicyDetail";
 import SalesRetentions from "@/components/sales/SalesRetentions";
 import SalesAlerts from "@/components/sales/SalesAlerts";
 import AgentPerformance from "@/components/sales/AgentPerformance";
-import SalesAnalytics from "@/components/sales/analytics/SalesAnalytics";
+import SalesAnalyticsHub from "@/components/sales/analytics/SalesAnalyticsHub";
 
 // ── Concierge ─────────────────────────────────────────────────
 import ConciergeDashboard from "@/components/concierge/ConciergeDashboard";
 import ConciergeLeads from "@/components/concierge/ConciergeLeads";
 import ConciergeActivity from "@/components/concierge/ConciergeActivity";
-import ConciergeAnalytics from "@/components/concierge/ConciergeAnalytics";
+import ConciergeAnalyticsHub from "@/components/concierge/ConciergeAnalyticsHub";
 
 // ── Credit Health ─────────────────────────────────────────────
 import CreditHealthDashboard from "@/components/credit-health/CreditHealthDashboard";
 import CreditHealthLeads from "@/components/credit-health/CreditHealthLeads";
-import CreditHealthAnalytics from "@/components/credit-health/CreditHealthAnalytics";
+import CreditHealthAnalyticsHub from "@/components/credit-health/CreditHealthAnalyticsHub";
 
 // ── Reporting (Hub) ───────────────────────────────────────────
 import HubGenerate from "@/components/hub/HubGenerate";
@@ -75,11 +70,6 @@ export default function ModuleHome({ module, segment, activePath, onNavigate }: 
   if (module === "executive") {
     if (activePath === "/executive/analytics/divisions") return <DivisionPerformance />;
     if (activePath === "/executive/analytics") return <AnalyticsOverview />;
-    if (activePath === "/executive/leads/funnel") return <LeadFunnel />;
-    if (activePath === "/executive/leads/sources") return <LeadSources />;
-    if (activePath === "/executive/leads/aging") return <LeadAging />;
-    if (activePath === "/executive/leads/lost") return <LostLeads />;
-    if (activePath === "/executive/leads") return <LeadOverview />;
     return <ExecutiveDashboard onNavigate={onNavigate} />;
   }
 
@@ -106,7 +96,7 @@ export default function ModuleHome({ module, segment, activePath, onNavigate }: 
     if (activePath === "/sales/clients") return <SalesClients segment={segment} onViewClient={(id) => onNavigate(`/sales/clients/${id}`)} />;
     if (activePath === "/sales/policies") return <SalesPolicies segment={segment} onViewPolicy={(id) => onNavigate(`/sales/policies/${id}`)} />;
     if (activePath === "/sales/retentions") return <SalesRetentions segment={segment} onViewClient={(id) => onNavigate(`/sales/clients/${id}`)} />;
-    if (activePath === "/sales/analytics") return <SalesAnalytics segment={segment} />;
+    if (activePath === "/sales/analytics") return <SalesAnalyticsHub />;
     if (activePath === "/sales/alerts") return <SalesAlerts segment={segment} onNavigate={onNavigate} onViewClient={(id) => onNavigate(`/sales/clients/${id}`)} />;
     if (activePath === "/sales/agent-performance") return <AgentPerformance segment={segment} />;
     return homeDashboard;
@@ -127,7 +117,7 @@ export default function ModuleHome({ module, segment, activePath, onNavigate }: 
   // ── CONCIERGE ──────────────────────────────────────────────
   if (module === "concierge") {
     if (activePath === "/concierge/leads") return <ConciergeLeads />;
-    if (activePath === "/concierge/analytics") return <ConciergeAnalytics />;
+    if (activePath === "/concierge/analytics") return <ConciergeAnalyticsHub />;
     if (activePath === "/concierge/activity") return <ConciergeActivity />;
     return <ConciergeDashboard onNavigate={onNavigate} />;
   }
@@ -135,7 +125,7 @@ export default function ModuleHome({ module, segment, activePath, onNavigate }: 
   // ── CREDIT HEALTH ──────────────────────────────────────────
   if (module === "credit-health") {
     if (activePath === "/credit-health/leads") return <CreditHealthLeads />;
-    if (activePath === "/credit-health/analytics") return <CreditHealthAnalytics />;
+    if (activePath === "/credit-health/analytics") return <CreditHealthAnalyticsHub />;
     if (activePath === "/credit-health/activity") return <CreditHealthLeads />;
     return <CreditHealthDashboard onNavigate={onNavigate} />;
   }
