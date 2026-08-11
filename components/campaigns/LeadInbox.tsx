@@ -1,6 +1,7 @@
 "use client";
 
 import React, { useState, useEffect } from "react";
+import { createPortal } from "react-dom";
 import {
   getCampaignLeads,
   getCampaigns,
@@ -38,7 +39,9 @@ export default function LeadInbox() {
   const [selectedLeads, setSelectedLeads] = useState<Set<string>>(new Set());
   const [assigningTo, setAssigningTo] = useState<string | null>(null);
   const [showAssignDropdown, setShowAssignDropdown] = useState<string | null>(null);
+  const [assignDropdownRect, setAssignDropdownRect] = useState<DOMRect | null>(null);
   const [showBulkAssign, setShowBulkAssign] = useState(false);
+  const [bulkAssignRect, setBulkAssignRect] = useState<DOMRect | null>(null);
 
   useEffect(() => {
     loadData();
@@ -144,15 +147,19 @@ export default function LeadInbox() {
             </span>
             <div className="relative">
               <button
-                onClick={() => setShowBulkAssign(!showBulkAssign)}
+                onClick={(e) => {
+                  setBulkAssignRect(e.currentTarget.getBoundingClientRect());
+                  setShowBulkAssign(!showBulkAssign);
+                }}
                 className="btn btn-primary"
               >
                 <UserPlus className="w-4 h-4" />
                 Assign to
               </button>
-              {showBulkAssign && (
+              {showBulkAssign && bulkAssignRect && (
                 <UserDropdown
                   users={users}
+                  anchorRect={bulkAssignRect}
                   onSelect={handleBulkAssign}
                   onClose={() => setShowBulkAssign(false)}
                 />
@@ -339,11 +346,12 @@ export default function LeadInbox() {
                     <td className="py-3 px-4">
                       <div className="relative">
                         <button
-                          onClick={() =>
+                          onClick={(e) => {
+                            setAssignDropdownRect(e.currentTarget.getBoundingClientRect());
                             setShowAssignDropdown(
                               showAssignDropdown === lead.id ? null : lead.id
-                            )
-                          }
+                            );
+                          }}
                           className={`text-xs font-medium px-2 py-1 rounded-md transition-colors ${
                             lead.assigned_to_user_id
                               ? "text-gray-700 hover:bg-gray-100"
@@ -354,9 +362,10 @@ export default function LeadInbox() {
                             ? getUserName(lead.assigned_to_user_id)
                             : "+ Assign"}
                         </button>
-                        {showAssignDropdown === lead.id && (
+                        {showAssignDropdown === lead.id && assignDropdownRect && (
                           <UserDropdown
                             users={users}
+                            anchorRect={assignDropdownRect}
                             onSelect={(userId) => handleAssign(lead.id, userId)}
                             onClose={() => setShowAssignDropdown(null)}
                           />
@@ -380,19 +389,36 @@ export default function LeadInbox() {
   );
 }
 
+// Rendered into document.body via portal, positioned from the trigger
+// button's own bounding rect — the assign button lives inside a
+// horizontally-scrolling table (.table-scroll), and an absolutely
+// positioned dropdown anchored to a `relative` ancestor inside that
+// container gets clipped by its overflow. Fixed-position + portal escapes
+// that entirely, regardless of what scrolls or clips in between.
 function UserDropdown({
   users,
+  anchorRect,
   onSelect,
   onClose,
 }: {
   users: { id: string; name: string; role: string }[];
+  anchorRect: DOMRect;
   onSelect: (userId: string) => void;
   onClose: () => void;
 }) {
-  return (
+  if (typeof document === "undefined") return null;
+
+  const width = 224; // w-56
+  const left = Math.min(Math.max(8, anchorRect.right - width), window.innerWidth - width - 8);
+  const top = anchorRect.bottom + 4;
+
+  return createPortal(
     <>
-      <div className="fixed inset-0 z-30" onClick={onClose} />
-      <div className="absolute right-0 mt-1 w-56 bg-white rounded-lg border border-gray-200 shadow-lg py-1 z-40 max-h-64 overflow-y-auto">
+      <div className="fixed inset-0 z-40" onClick={onClose} />
+      <div
+        className="fixed w-56 bg-white rounded-lg border border-gray-200 shadow-lg py-1 z-50 max-h-64 overflow-y-auto"
+        style={{ top, left }}
+      >
         {users.map((u) => (
           <button
             key={u.id}
@@ -409,6 +435,7 @@ function UserDropdown({
           </button>
         ))}
       </div>
-    </>
+    </>,
+    document.body
   );
 }

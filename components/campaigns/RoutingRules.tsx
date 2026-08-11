@@ -11,7 +11,7 @@ import {
 } from "@/lib/campaigns-api";
 import type { RoutingRule, BusinessUnit, Campaign } from "@/types";
 import { RoutingMethod } from "@/types";
-import { Plus, X, Settings, Trash2, Power, PowerOff } from "lucide-react";
+import { Plus, X, Settings, Trash2, ToggleRight, ToggleLeft } from "lucide-react";
 
 export default function RoutingRules() {
   const [rules, setRules] = useState<RoutingRule[]>([]);
@@ -91,8 +91,16 @@ export default function RoutingRules() {
                   {rule.assigned_user_ids.map((id) => getName(users, id)).join(", ")}
                 </p>
               </div>
-              <button onClick={() => handleToggle(rule)} className="btn btn-ghost px-2">
-                {rule.is_active ? <Power className="w-5 h-5 text-green-600" /> : <PowerOff className="w-5 h-5" />}
+              <button
+                onClick={() => handleToggle(rule)}
+                className={`btn text-xs gap-1.5 ${rule.is_active ? "btn-secondary" : "btn-primary"}`}
+                title={rule.is_active ? "Deactivate" : "Activate"}
+              >
+                {rule.is_active ? (
+                  <><ToggleRight className="w-4 h-4 text-green-600" /> Active</>
+                ) : (
+                  <><ToggleLeft className="w-4 h-4" /> Inactive</>
+                )}
               </button>
             </div>
           ))}

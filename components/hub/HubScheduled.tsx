@@ -1,7 +1,7 @@
 "use client";
 
 import React, { useEffect, useState, useCallback } from "react";
-import { Plus, Edit2, Trash2, Mail, X, Play } from "lucide-react";
+import { Plus, Edit2, Trash2, Mail, X, Play, ToggleRight, ToggleLeft } from "lucide-react";
 import { supabase } from "@/lib/supabase";
 import {
   getReportMailings, createReportMailing, updateReportMailing, deleteReportMailing,
@@ -340,11 +340,15 @@ export default function HubScheduled() {
                           <Play className="w-3 h-3" /> Test
                         </button>
                         <button
-                          className="text-xs font-medium"
-                          style={{ color: m.active ? "#854F0B" : "#0F6E56" }}
                           onClick={() => handleToggle(m)}
+                          className={`btn text-xs gap-1.5 ${m.active ? "btn-secondary" : "btn-primary"}`}
+                          title={m.active ? "Pause" : "Resume"}
                         >
-                          {m.active ? "Pause" : "Resume"}
+                          {m.active ? (
+                            <><ToggleRight className="w-4 h-4 text-green-600" /> Active</>
+                          ) : (
+                            <><ToggleLeft className="w-4 h-4" /> Paused</>
+                          )}
                         </button>
                         <button
                           className="btn btn-ghost p-1 text-red-400 hover:text-red-600"
