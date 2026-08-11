@@ -34,15 +34,54 @@ async function dbGet(path: string) {
 
 const fmtDate = (d: string | null) => d ? new Date(d).toLocaleDateString('en-ZA', { day: 'numeric', month: 'short', year: 'numeric' }) : '';
 
+// ── Date range scoping ──────────────────────────────────────────
+// A mailing can be limited to a period ("this week's new policies")
+// instead of always dumping the entire table. "since_last_sent" is
+// the useful default for a recurring mailing — each send only
+// contains what's new since the previous one.
+
+type ReportDateRange = 'all' | '7d' | '30d' | '90d' | 'mtd' | 'ytd' | 'since_last_sent';
+
+const RANGE_LABELS: Record<ReportDateRange, string> = {
+  all: 'All data', since_last_sent: 'Since last send', '7d': 'Last 7 days',
+  '30d': 'Last 30 days', '90d': 'Last 90 days', mtd: 'Month to date', ytd: 'Year to date',
+};
+
+function rangeToSince(range: ReportDateRange, lastSentAt: string | null): Date | null {
+  const now = new Date();
+  switch (range) {
+    case '7d': return new Date(now.getTime() - 7 * 86400000);
+    case '30d': return new Date(now.getTime() - 30 * 86400000);
+    case '90d': return new Date(now.getTime() - 90 * 86400000);
+    case 'mtd': return new Date(now.getFullYear(), now.getMonth(), 1);
+    case 'ytd': return new Date(now.getFullYear(), 0, 1);
+    case 'since_last_sent': return lastSentAt ? new Date(lastSentAt) : null;
+    default: return null;
+  }
+}
+
 interface Col { label: string; type: 'text' | 'currency' | 'number' | 'pct' | 'status'; width: number; }
 interface ReportData { cols: Col[]; rows: (string | number | null)[][]; label: string; subtitle: string; sheetName: string; }
 
+function withRangeSubtitle(subtitle: string, since: Date | null, rangeLabel: string): string {
+  return since ? `${subtitle} — ${rangeLabel}` : subtitle;
+}
+
 // Ported from app/api/generate-report/route.ts's getReportData — same report
 // types, same column layouts, just plain REST GETs instead of supabase-js
-// (this function has no JS client dependency, only fetch).
-async function fetchReportData(reportType: string): Promise<ReportData> {
+// (this function has no JS client dependency, only fetch). `since`/`rangeLabel`
+// scope each report to a period; leads-based "flow" columns (new leads, won,
+// conversion) and sale-date-based columns are period-scoped, while
+// current-state snapshots (active premium, active policy counts) always
+// reflect the current book regardless of range — a "this week" report still
+// needs to show the real current active premium, not a zeroed-out slice.
+async function fetchReportData(reportType: string, since: Date | null, rangeLabel: string): Promise<ReportData> {
+  const sinceStr = since ? since.toISOString().slice(0, 10) : null;
+  const sinceIso = since ? since.toISOString() : null;
+
   if (reportType === 'policy_register') {
-    const data = await dbGet('policies?select=policy_number,status,product_name,product_category,insurer,premium,base_premium,inception_date,sale_date,documentation_status,client_segment,clients(name),users(name)&order=inception_date.desc');
+    const filter = sinceStr ? `&sale_date=gte.${sinceStr}` : '';
+    const data = await dbGet(`policies?select=policy_number,status,product_name,product_category,insurer,premium,base_premium,inception_date,sale_date,documentation_status,client_segment,clients(name),users(name)&order=inception_date.desc${filter}`);
     const rows = (data ?? []).map((p: Record<string, unknown>) => [
       String(p.policy_number ?? ''), String((p.clients as { name: string } | null)?.name ?? ''),
       String(p.product_category ?? ''), String(p.product_name ?? ''), String(p.insurer ?? ''),
@@ -52,7 +91,7 @@ async function fetchReportData(reportType: string): Promise<ReportData> {
       String((p.users as { name: string } | null)?.name ?? ''),
     ]);
     return {
-      label: 'Policy Register', subtitle: 'All Policies', sheetName: 'Policy Register',
+      label: 'Policy Register', subtitle: withRangeSubtitle(sinceStr ? 'Policies sold' : 'All Policies', since, rangeLabel), sheetName: 'Policy Register',
       cols: [
         { label: 'Policy #', type: 'text', width: 14 }, { label: 'Client', type: 'text', width: 24 },
         { label: 'Category', type: 'text', width: 20 }, { label: 'Product', type: 'text', width: 24 },
@@ -67,10 +106,11 @@ async function fetchReportData(reportType: string): Promise<ReportData> {
   }
 
   if (reportType === 'agent_summary') {
+    const leadFilter = sinceIso ? `&created_at=gte.${sinceIso}` : '';
     const [users, policies, leads] = await Promise.all([
       dbGet('users?select=id,name,role&status=eq.Active&role=in.("Sales Agent","Team Leader")&order=name'),
       dbGet('policies?select=sold_by_user_id,status,premium'),
-      dbGet('leads?select=assigned_to_user_id,status'),
+      dbGet(`leads?select=assigned_to_user_id,status,created_at${leadFilter}`),
     ]);
     const rows = (users ?? []).map((u: Record<string, unknown>) => {
       const al = (leads ?? []).filter((l: Record<string, unknown>) => l.assigned_to_user_id === u.id);
@@ -81,7 +121,9 @@ async function fetchReportData(reportType: string): Promise<ReportData> {
       return [String(u.name), String(u.role), al.length, won, al.length > 0 ? Math.round((won / al.length) * 1000) / 10 : 0, ap.length, active.length, prem];
     });
     return {
-      label: 'Agent Performance Summary', subtitle: 'Sales Unit — All Agents', sheetName: 'Agent Summary',
+      label: 'Agent Performance Summary',
+      subtitle: withRangeSubtitle('Sales Unit — All Agents (Leads/Won scoped to range; Policies/Premium are the current book)', since, rangeLabel),
+      sheetName: 'Agent Summary',
       cols: [
         { label: 'Agent', type: 'text', width: 24 }, { label: 'Role', type: 'text', width: 20 },
         { label: 'Total Leads', type: 'number', width: 12 }, { label: 'Won', type: 'number', width: 8 },
@@ -93,7 +135,8 @@ async function fetchReportData(reportType: string): Promise<ReportData> {
   }
 
   if (reportType === 'lead_pipeline') {
-    const data = await dbGet('leads?select=name,email,phone,status,source,segment,created_at,loss_reason,users!leads_assignedTo_fkey(name)&order=created_at.desc');
+    const filter = sinceIso ? `&created_at=gte.${sinceIso}` : '';
+    const data = await dbGet(`leads?select=name,email,phone,status,source,segment,created_at,loss_reason,users!leads_assignedTo_fkey(name)&order=created_at.desc${filter}`);
     const rows = (data ?? []).map((l: Record<string, unknown>) => [
       String(l.name ?? ''), (String(l.email ?? '')).includes('@placeholder.com') ? '' : String(l.email ?? ''),
       String(l.phone ?? ''), String(l.status ?? ''), String(l.source ?? ''), String(l.segment ?? ''),
@@ -101,7 +144,7 @@ async function fetchReportData(reportType: string): Promise<ReportData> {
       fmtDate(l.created_at as string | null), String(l.loss_reason ?? ''),
     ]);
     return {
-      label: 'Lead Pipeline', subtitle: 'All Leads', sheetName: 'Lead Pipeline',
+      label: 'Lead Pipeline', subtitle: withRangeSubtitle(sinceIso ? 'New Leads' : 'All Leads', since, rangeLabel), sheetName: 'Lead Pipeline',
       cols: [
         { label: 'Name', type: 'text', width: 22 }, { label: 'Email', type: 'text', width: 26 },
         { label: 'Phone', type: 'text', width: 14 }, { label: 'Status', type: 'status', width: 12 },
@@ -127,7 +170,9 @@ async function fetchReportData(reportType: string): Promise<ReportData> {
     const rows = Object.entries(map).sort((a, b) => b[1].activePrem - a[1].activePrem)
       .map(([ins, v]) => [ins, v.active, v.total, v.activePrem, grand > 0 ? Math.round((v.activePrem / grand) * 1000) / 10 : 0, Array.from(v.cats).join(', ')]);
     return {
-      label: 'Premium by Insurer', subtitle: 'Active Premium Distribution', sheetName: 'Premium by Insurer',
+      // Always the current book — a "premium by insurer" snapshot filtered to
+      // one week would mostly be empty/misleading, so date_range is ignored here.
+      label: 'Premium by Insurer', subtitle: 'Active Premium Distribution (current book, not affected by date range)', sheetName: 'Premium by Insurer',
       cols: [
         { label: 'Insurer', type: 'text', width: 20 }, { label: 'Active Policies', type: 'number', width: 14 },
         { label: 'Total Policies', type: 'number', width: 13 }, { label: 'Active Premium', type: 'currency', width: 18 },
@@ -138,8 +183,25 @@ async function fetchReportData(reportType: string): Promise<ReportData> {
   }
 
   if (reportType === 'retention_summary') {
-    const data = await dbGet('policies?select=policy_number,status,premium,insurer,product_name,retention_details,clients(name)&status=in.(Retained,Canceled,Expired)&order=status');
-    const rows = (data ?? []).map((p: Record<string, unknown>) => {
+    const raw = await dbGet('policies?select=policy_number,status,premium,insurer,product_name,retention_details,cancellation_date,clients(name)&status=in.(Retained,Canceled,Expired)&order=status');
+    // No single "when did this happen" column exists across Retained/Canceled/
+    // Expired, so the best available event date is retainedAt (if retained) or
+    // cancellation_date (if canceled/expired) — filtered client-side since it's
+    // not a plain column.
+    const eventDate = (p: Record<string, unknown>): string | null => {
+      const rd = p.retention_details as Record<string, string> | null;
+      return rd?.retainedAt ?? (p.cancellation_date as string | null) ?? null;
+    };
+    const data = ((raw ?? []) as Record<string, unknown>[]).filter((p) => {
+      if (!sinceIso) return true;
+      const d = eventDate(p);
+      if (d === null) return false;
+      // cancellation_date is a plain date (10 chars); normalize to start-of-day
+      // so it compares correctly against the full ISO sinceIso timestamp.
+      const dIso = d.length === 10 ? `${d}T00:00:00.000Z` : d;
+      return dIso >= sinceIso;
+    });
+    const rows = data.map((p: Record<string, unknown>) => {
       const rd = p.retention_details as Record<string, string> | null;
       return [
         String(p.policy_number ?? ''), String((p.clients as { name: string } | null)?.name ?? ''),
@@ -149,7 +211,7 @@ async function fetchReportData(reportType: string): Promise<ReportData> {
       ];
     });
     return {
-      label: 'Retention Summary', subtitle: 'Canceled, Expired & Retained', sheetName: 'Retention Summary',
+      label: 'Retention Summary', subtitle: withRangeSubtitle('Canceled, Expired & Retained', since, rangeLabel), sheetName: 'Retention Summary',
       cols: [
         { label: 'Policy #', type: 'text', width: 14 }, { label: 'Client', type: 'text', width: 24 },
         { label: 'Product', type: 'text', width: 24 }, { label: 'Insurer', type: 'text', width: 16 },
@@ -162,7 +224,8 @@ async function fetchReportData(reportType: string): Promise<ReportData> {
   }
 
   if (reportType === 'concierge_pipeline') {
-    const data = await dbGet(`leads?select=name,phone,source,unit_status,vehicle_make,vehicle_model,vehicle_year,vehicle_price,created_at,users!leads_assignedTo_fkey(name)&business_unit_id=eq.${CONCIERGE_UNIT_ID}&order=created_at.desc`);
+    const filter = sinceIso ? `&created_at=gte.${sinceIso}` : '';
+    const data = await dbGet(`leads?select=name,phone,source,unit_status,vehicle_make,vehicle_model,vehicle_year,vehicle_price,created_at,users!leads_assignedTo_fkey(name)&business_unit_id=eq.${CONCIERGE_UNIT_ID}&order=created_at.desc${filter}`);
     const rows = (data ?? []).map((l: Record<string, unknown>) => [
       String(l.name ?? ''), String(l.phone ?? ''), String(l.source ?? ''), String(l.unit_status ?? ''),
       String([l.vehicle_make, l.vehicle_model, l.vehicle_year].filter(Boolean).join(' ') || '—'),
@@ -170,7 +233,7 @@ async function fetchReportData(reportType: string): Promise<ReportData> {
       String((l.users as { name: string } | null)?.name ?? 'Unassigned'), fmtDate(l.created_at as string | null),
     ]);
     return {
-      label: 'Concierge Pipeline', subtitle: 'Vehicle Acquisition', sheetName: 'Concierge Pipeline',
+      label: 'Concierge Pipeline', subtitle: withRangeSubtitle('Vehicle Acquisition', since, rangeLabel), sheetName: 'Concierge Pipeline',
       cols: [
         { label: 'Name', type: 'text', width: 22 }, { label: 'Phone', type: 'text', width: 14 },
         { label: 'Source', type: 'text', width: 12 }, { label: 'Status', type: 'status', width: 14 },
@@ -182,7 +245,8 @@ async function fetchReportData(reportType: string): Promise<ReportData> {
   }
 
   if (reportType === 'credit_health_pipeline') {
-    const data = await dbGet(`leads?select=name,phone,source,unit_status,employment_status,monthly_income,loan_amount,credit_score,created_at,users!leads_assignedTo_fkey(name)&business_unit_id=eq.${CREDIT_HEALTH_UNIT_ID}&order=created_at.desc`);
+    const filter = sinceIso ? `&created_at=gte.${sinceIso}` : '';
+    const data = await dbGet(`leads?select=name,phone,source,unit_status,employment_status,monthly_income,loan_amount,credit_score,created_at,users!leads_assignedTo_fkey(name)&business_unit_id=eq.${CREDIT_HEALTH_UNIT_ID}&order=created_at.desc${filter}`);
     const rows = (data ?? []).map((l: Record<string, unknown>) => [
       String(l.name ?? ''), String(l.phone ?? ''), String(l.source ?? ''), String(l.unit_status ?? ''),
       String(l.employment_status ?? ''), l.monthly_income ? Number(l.monthly_income) : 0,
@@ -190,7 +254,7 @@ async function fetchReportData(reportType: string): Promise<ReportData> {
       String((l.users as { name: string } | null)?.name ?? 'Unassigned'), fmtDate(l.created_at as string | null),
     ]);
     return {
-      label: 'Credit Health Pipeline', subtitle: 'Credit Advisory', sheetName: 'Credit Health',
+      label: 'Credit Health Pipeline', subtitle: withRangeSubtitle('Credit Advisory', since, rangeLabel), sheetName: 'Credit Health',
       cols: [
         { label: 'Name', type: 'text', width: 22 }, { label: 'Phone', type: 'text', width: 14 },
         { label: 'Source', type: 'text', width: 12 }, { label: 'Status', type: 'status', width: 14 },
@@ -204,8 +268,9 @@ async function fetchReportData(reportType: string): Promise<ReportData> {
 
   if (reportType === 'business_unit_comparison') {
     const isSales = (bu: unknown) => !bu || bu === SALES_UNIT_ID;
+    const leadFilter = sinceIso ? `&created_at=gte.${sinceIso}` : '';
     const [leads, policies] = await Promise.all([
-      dbGet('leads?select=business_unit_id,status,unit_status'),
+      dbGet(`leads?select=business_unit_id,status,unit_status,created_at${leadFilter}`),
       dbGet('policies?select=status,premium'),
     ]);
     const salesLeads = (leads ?? []).filter((l: Record<string, unknown>) => isSales(l.business_unit_id));
@@ -220,7 +285,9 @@ async function fetchReportData(reportType: string): Promise<ReportData> {
       ['Credit Health', creditLeads.length, won(creditLeads, 'unit_status', 'Approved'), creditLeads.length > 0 ? Math.round((won(creditLeads, 'unit_status', 'Approved') / creditLeads.length) * 1000) / 10 : 0, 0, 0],
     ];
     return {
-      label: 'Business Unit Comparison', subtitle: 'All Divisions', sheetName: 'Business Units',
+      label: 'Business Unit Comparison',
+      subtitle: withRangeSubtitle('All Divisions (Leads/Won scoped to range; Policies/Premium are the current book)', since, rangeLabel),
+      sheetName: 'Business Units',
       cols: [
         { label: 'Division', type: 'text', width: 18 }, { label: 'Total Leads', type: 'number', width: 13 },
         { label: 'Won', type: 'number', width: 8 }, { label: 'Conversion %', type: 'pct', width: 13 },
@@ -231,7 +298,8 @@ async function fetchReportData(reportType: string): Promise<ReportData> {
   }
 
   // Fallback: conversion by source
-  const data = await dbGet('leads?select=source,status');
+  const srcFilter = sinceIso ? `&created_at=gte.${sinceIso}` : '';
+  const data = await dbGet(`leads?select=source,status${srcFilter}`);
   const srcMap: Record<string, { total: number; won: number }> = {};
   (data ?? []).forEach((l: Record<string, unknown>) => {
     const s = String(l.source ?? 'Unknown');
@@ -242,7 +310,7 @@ async function fetchReportData(reportType: string): Promise<ReportData> {
   const rows = Object.entries(srcMap).sort((a, b) => b[1].total - a[1].total)
     .map(([source, v]) => [source, v.total, v.won, v.total > 0 ? Math.round((v.won / v.total) * 1000) / 10 : 0]);
   return {
-    label: 'Conversion by Source', subtitle: 'Lead Funnel Analysis', sheetName: 'Conversion by Source',
+    label: 'Conversion by Source', subtitle: withRangeSubtitle('Lead Funnel Analysis', since, rangeLabel), sheetName: 'Conversion by Source',
     cols: [
       { label: 'Source', type: 'text', width: 18 }, { label: 'Total Leads', type: 'number', width: 12 },
       { label: 'Won', type: 'number', width: 8 }, { label: 'Win Rate %', type: 'pct', width: 11 },
@@ -339,7 +407,10 @@ serve(async (req) => {
     const mailings=await mailingRes.json();
     if(!mailings?.[0])return new Response(JSON.stringify({error:'Mailing not found'}),{status:404,headers:{...cors,'Content-Type':'application/json'}});
     const mailing=mailings[0];
-    const{cols,rows,label:reportLabel,sheetName,subtitle}=await fetchReportData(mailing.report_type);
+    const range:ReportDateRange=(mailing.date_range as ReportDateRange)??'all';
+    const since=rangeToSince(range,mailing.last_sent_at??null);
+    const rangeLabel=RANGE_LABELS[range]??'All data';
+    const{cols,rows,label:reportLabel,sheetName,subtitle}=await fetchReportData(mailing.report_type,since,rangeLabel);
     const dateStr=new Date().toLocaleDateString('en-ZA',{day:'numeric',month:'long',year:'numeric'});
     const filename=`mmela-${mailing.report_type.replace(/_/g,'-')}-${new Date().toISOString().slice(0,10)}.xlsx`;
     const subject=mailing.subject||`${reportLabel} — ${dateStr}`;
