@@ -18,6 +18,8 @@ import CampaignAnalytics from "@/components/campaigns/CampaignAnalytics";
 // ── Sales ─────────────────────────────────────────────────────
 import SalesDashboard from "@/components/sales/SalesDashboard";
 import ExecutiveDashboard from "@/components/sales/ExecutiveDashboard";
+import AnalyticsOverview from "@/components/executive/AnalyticsOverview";
+import DivisionPerformance from "@/components/executive/DivisionPerformance";
 import PolicyAdminDashboard from "@/components/sales/PolicyAdminDashboard";
 import SalesLeads from "@/components/sales/SalesLeads";
 import LeadDetail from "@/components/sales/LeadDetail";
@@ -66,6 +68,8 @@ export default function ModuleHome({ module, segment, activePath, onNavigate }: 
   // ── EXECUTIVE ──────────────────────────────────────────────
   // Standalone cross-business rollup, not nested under any one module.
   if (module === "executive") {
+    if (activePath === "/executive/analytics/divisions") return <DivisionPerformance />;
+    if (activePath === "/executive/analytics") return <AnalyticsOverview />;
     return <ExecutiveDashboard onNavigate={onNavigate} />;
   }
 

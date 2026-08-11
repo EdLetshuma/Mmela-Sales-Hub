@@ -820,7 +820,7 @@ const MONTH_LABELS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "S
 // "All time" has no natural previous period to compare against, so growth
 // there falls back to the current calendar month vs the previous one —
 // every other range compares against an equal-length period right before it.
-function rangeToDates(range: ExecutiveRange, now: Date): { since: Date | null; prevSince: Date | null; prevUntil: Date | null } {
+export function rangeToDates(range: ExecutiveRange, now: Date): { since: Date | null; prevSince: Date | null; prevUntil: Date | null } {
   if (range === "all") return { since: null, prevSince: null, prevUntil: null };
   let since: Date;
   if (range === "30d") since = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000);

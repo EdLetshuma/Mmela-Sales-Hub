@@ -16,6 +16,13 @@ export const MODULE_CONFIG: Record<MmelaModule, ModuleConfig> = {
     defaultPath: "/executive",
     navItems: [
       { label: "Dashboard", href: "/executive" },
+      {
+        label: "Analytics", href: "/executive/analytics",
+        children: [
+          { label: "Overview", href: "/executive/analytics" },
+          { label: "Divisions", href: "/executive/analytics/divisions" },
+        ],
+      },
     ],
   },
 
